@@ -54,22 +54,44 @@
     return s.sex === 'M' ? '<span class="sex sex-m"><span aria-hidden="true">♂</span> Male</span>' : '<span class="sex sex-f"><span aria-hidden="true">♀</span> Female</span>';
   }
 
+  function formType(f) {
+    return f.combo ? 'Allele combination' : typeName(f.gene.type);
+  }
+
   function geneTags(snake) {
-    var tags = G.visualGenes(snake.genotype).map(function (id) {
-      var gene = SB.GENE_BY_ID[id];
-      var cls = G.visualClass(gene, snake.genotype[id]);
-      return '<span class="tag tag-visual" title="' + esc(typeName(gene.type)) + ' — visual">' + esc(G.classLabel(gene, cls)) + '</span>';
+    var desc = G.describe(snake.genotype);
+    var tags = G.visualForms(snake.genotype).map(function (f) {
+      return '<span class="tag tag-visual" title="' + esc(formType(f)) + ' — visual">' + esc(f.name) + '</span>';
     });
     if (!tags.length) tags.push('<span class="tag tag-visual">Normal</span>');
+    desc.combos.forEach(function (c) {
+      tags.unshift('<span class="tag tag-trait" title="Designer name">' + esc(c.name) + '</span>');
+    });
+    G.traitBadges(snake).forEach(function (b) {
+      tags.push('<span class="tag tag-trait" title="' + esc(b.trait.name) + ' ' + b.score + '/100 (line-bred)">' + esc(b.label) + '</span>');
+    });
     G.carrierNotes(snake).forEach(function (n) {
       tags.push('<span class="tag ' + (n.certain ? 'tag-het' : 'tag-poss') + '">' + esc(n.text) + '</span>');
+    });
+    G.healthIssues(snake.genotype, snake.sex).forEach(function (h) {
+      tags.push('<span class="tag tag-health" title="' + esc(h.note) + '"><span aria-hidden="true">⚕</span> ' + esc(capital(h.issue)) + ' <span class="sr-only">(' + esc(h.severity) + ' health issue from ' + esc(h.source) + ')</span></span>');
     });
     return '<div class="tags">' + tags.join('') + '</div>';
   }
   ui.geneTags = geneTags;
 
+  function capital(t) { return t ? t.charAt(0).toUpperCase() + t.slice(1) : ''; }
+
   function typeName(t) {
     return t === 'codominant' ? 'Incomplete dominant' : t === 'dominant' ? 'Dominant' : 'Recessive';
+  }
+
+  /* Welfare list for a snake's gene-linked health issues. */
+  function welfareList(issues) {
+    return issues.map(function (h) {
+      return '<li>' + chip(h.severity === 'severe' ? 'bad' : 'warn', capital(h.severity) + ' ' + h.issue) + ' <strong>' + esc(h.source) + '</strong> — ' + esc(h.note) +
+        (h.fertility != null && h.fertility < 1 ? ' <span class="muted">(reduced fertility in females)</span>' : '') + '</li>';
+    }).join('');
   }
 
   function snakeStatusChips(state, s) {
@@ -335,7 +357,8 @@
     var sell = sim.canSell(state, s);
     var proj = sim.projectFor(state, s);
     var freeHomes = sim.freeEnclosures(state).filter(function (x) { return sim.fitsIn(s, x); });
-    var genes = G.visualGenes(s.genotype);
+    var forms = G.visualForms(s.genotype);
+    var issues = G.healthIssues(s.genotype, s.sex);
     var parents = s.parents ? 'Offspring of <strong>' + esc(s.parents.sireName) + '</strong> × <strong>' + esc(s.parents.damName) + '</strong>' + (s.hatchWeek ? ', hatched week ' + s.hatchWeek : '') + '.' : 'Origin: ' + esc(s.origin) + '.';
 
     return '<div class="detail">' +
@@ -361,14 +384,18 @@
           (proj ? '<p class="small">' + chip('info', proj.stage === 'pairing' ? 'In a pairing' : 'Gravid') + ' Part of the ' + esc(proj.maleName) + ' × ' + esc(proj.femaleName) + ' project.</p>' : '') +
         '</section>' +
         '<section><h3>Genetics</h3>' + geneTags(s) +
-          '<ul class="gene-list">' + (genes.length ? genes.map(function (id) {
-            var gene = SB.GENE_BY_ID[id];
-            var c = s.genotype[id];
-            return '<li><strong>' + esc(G.classLabel(gene, G.visualClass(gene, c))) + '</strong> <span class="muted">(' + typeName(gene.type) + (gene.type === 'codominant' ? ', ' + c + ' cop' + (c === 1 ? 'y' : 'ies') : '') + ')</span> — ' + esc(gene.blurb) + '</li>';
+          '<ul class="gene-list">' + (forms.length ? forms.map(function (f) {
+            var detail = f.combo ? 'one copy each of ' + f.combo.pair.map(function (id) { return G.gene(id).name; }).join(' and ') + ', same locus'
+              : typeName(f.gene.type) + (f.gene.type === 'codominant' ? ', ' + (f.cls === 'super' ? 2 : 1) + ' cop' + (f.cls === 'super' ? 'ies' : 'y') : '');
+            return '<li><strong>' + esc(f.name) + '</strong> <span class="muted">(' + esc(detail) + ')</span> — ' + esc((f.combo || f.gene).blurb || '') + '</li>';
           }).join('') : '<li>Normal (wild type) appearance — no visual morph genes.</li>') +
+          G.traitBadges(s).map(function (b) {
+            return '<li><strong>' + esc(b.label) + '</strong> <span class="muted">(line-bred, ' + b.score + '/100)</span> — ' + esc(b.trait.blurb || '') + '</li>';
+          }).join('') +
           G.carrierNotes(s).map(function (n) {
             return '<li><strong>' + esc(n.text) + '</strong> <span class="muted">— ' + (n.certain ? 'proven by lineage' : 'odds from lineage; only breeding can prove it') + '</span></li>';
           }).join('') + '</ul>' +
+          (issues.length ? '<h4>Welfare</h4><ul class="gene-list welfare">' + welfareList(issues) + '</ul>' : '') +
           '<p class="small muted">' + parents + '</p>' +
           '<p class="small">' + (elig.ok ? chip('good', 'Eligible to breed') : chip('warn', 'Not breeding-ready') + ' ' + esc(elig.reasons.join('; ')) + '.') + '</p>' +
         '</section>' +
@@ -407,10 +434,20 @@
     }).join('') + '</fieldset>';
   }
 
-  ui.outcomeTable = function (pred, clutchMid) {
+  /* Carrier, sex-split and health notes for one predicted outcome. */
+  function outcomeNotes(o) {
+    var out = o.carriers.slice();
+    if (o.sexNote) out.push(o.sexNote);
+    (o.health || []).forEach(function (h) { out.push('⚕ ' + h.issue + (h.p < 0.999 ? ' (' + G.pct(h.p) + ')' : '')); });
+    if (o.other && o.count) out.push(o.count + ' rarer looks');
+    return out;
+  }
+
+  ui.outcomeTable = function (pred, clutchMid, max) {
     return '<table class="outcomes"><caption class="sr-only">Predicted offspring per egg</caption><thead><tr><th scope="col">Morph</th><th scope="col">Chance per egg</th>' + (clutchMid ? '<th scope="col" class="hide-sm">In ' + clutchMid + ' eggs</th>' : '') + '</tr></thead><tbody>' +
-      pred.outcomes.map(function (o) {
-        return '<tr><th scope="row"><span class="morph-name">' + esc(o.label) + '</span>' + (o.carriers.length ? '<span class="carrier">' + esc(o.carriers.join(' · ')) + '</span>' : '') + '</th>' +
+      G.topOutcomes(pred, max || 14).map(function (o) {
+        var notes = outcomeNotes(o);
+        return '<tr' + (o.lethal ? ' class="is-lethal"' : o.other ? ' class="is-other"' : '') + '><th scope="row"><span class="morph-name">' + esc(o.label) + '</span>' + (notes.length ? '<span class="carrier">' + esc(notes.join(' · ')) + '</span>' : '') + '</th>' +
           '<td><div class="bar"><div class="bar-fill" style="width:' + (o.prob * 100).toFixed(1) + '%"></div><span>' + G.pct(o.prob) + '</span></div></td>' +
           (clutchMid ? '<td class="hide-sm">≈ ' + U.round(o.prob * clutchMid, 1) + '</td>' : '') + '</tr>';
       }).join('') + '</tbody></table>';
@@ -428,6 +465,7 @@
         '<h2 id="prev-h">Outcome preview: ' + esc(m.name) + ' × ' + esc(f.name) + '</h2>' +
         '<p class="small">' + esc(G.fullLabel(m)) + ' <strong>×</strong> ' + esc(G.fullLabel(f)) + '</p>' +
         ui.outcomeTable(pred, mid) +
+        predictionWarnings(pred) +
         '<div class="note"><strong>Remember: a clutch is a small sample.</strong> These are odds for <em>each egg</em>, like coin flips. A clutch of ' + clutch[0] + '–' + clutch[1] + ' eggs can easily contain more or fewer of a morph than predicted — even none.</div>' +
         '<ul class="facts-inline"><li>Expected clutch: <strong>' + clutch[0] + '–' + clutch[1] + ' eggs</strong> (bigger, healthier females lay more)</li>' +
         '<li>Chance the pairing takes: <strong>about ' + Math.round(sim.successChance(m, f) * 100) + '%</strong> (health &amp; stress matter)</li>' +
@@ -460,17 +498,35 @@
       '</section>' +
       '<section class="card" aria-labelledby="ex-h"><h2 id="ex-h">Example pairings</h2><p class="small">Classic crosses that show how each inheritance type works.</p><div class="examples">' +
         SB.EXAMPLE_PAIRINGS.map(function (ex) {
-          var pred = G.predict({ genotype: ex.male, knowledge: G.exactKnowledge(ex.male) }, { genotype: ex.female, knowledge: G.exactKnowledge(ex.female) });
-          return '<div class="example"><h3>' + esc(ex.title) + '</h3><p class="small"><strong>' + esc(exLabel(ex.male)) + ' × ' + esc(exLabel(ex.female)) + '</strong></p>' +
-            '<ul class="mini-outcomes">' + pred.outcomes.map(function (o) { return '<li><span>' + esc(o.label) + (o.carriers.length ? ' <em>(' + esc(o.carriers.join(', ')) + ')</em>' : '') + '</span><strong>' + G.pct(o.prob) + '</strong></li>'; }).join('') + '</ul>' +
+          var pred = G.predict(exSnake(ex.male, 'M'), exSnake(ex.female, 'F'));
+          return '<div class="example"><h3>' + esc(ex.title) + '</h3><p class="small"><strong>' + esc(exLabel(ex.male, 'M')) + ' × ' + esc(exLabel(ex.female, 'F')) + '</strong></p>' +
+            '<ul class="mini-outcomes">' + G.topOutcomes(pred, 8).map(function (o) { var n = outcomeNotes(o); return '<li><span>' + esc(o.label) + (n.length ? ' <em>(' + esc(n.join(', ')) + ')</em>' : '') + '</span><strong>' + G.pct(o.prob) + '</strong></li>'; }).join('') + '</ul>' +
             '<p class="small muted">' + esc(ex.note) + '</p></div>';
         }).join('') + '</div></section>' +
       '</div>';
   };
 
-  function exLabel(geno) {
-    var s = { genotype: geno, knowledge: G.exactKnowledge(geno) };
-    return G.fullLabel(s);
+  function exSnake(geno, sex) { return { genotype: geno, knowledge: G.exactKnowledge(geno), sex: sex }; }
+  function exLabel(geno, sex) { return G.fullLabel(exSnake(geno, sex)); }
+
+  /* Lethal odds, health flags, sex linkage and line-bred traits for a preview. */
+  function predictionWarnings(pred) {
+    var out = '';
+    if (pred.lethal > 0) {
+      out += '<div class="note note-warn"><span aria-hidden="true">!</span> <strong>' + G.pct(pred.lethal) + ' non-viable:</strong> about ' + G.pct(pred.lethal) + ' of fertile eggs get a lethal gene combination. They are laid but never develop, so expect a smaller hatch.</div>';
+    }
+    if (pred.health.length) {
+      out += '<div class="note note-warn"><strong>Welfare check</strong><ul class="welfare">' + pred.health.map(function (h) {
+        return '<li><strong>' + G.pct(h.prob) + '</strong> of eggs: ' + esc(h.issue) + ' from ' + esc(h.source) + ' (' + esc(h.severity) + (h.sex ? ', ' + (h.sex === 'F' ? 'females' : 'males') + ' only' : '') + ') — ' + esc(h.note) + '</li>';
+      }).join('') + '</ul><p class="small">Selling affected animals earns less goodwill, and some buyers will pass. Consider whether this pairing is kind.</p></div>';
+    }
+    if (pred.sexLinked) {
+      out += '<div class="note"><strong>Sex-linked gene:</strong> odds differ for sons and daughters (see the % male/female notes). A male’s “male maker” or “female maker” status depends on which parent gave him the gene.</div>';
+    }
+    (pred.traits || []).forEach(function (t) {
+      out += '<p class="small">' + esc(t.trait.name) + ' (line-bred): babies average about <strong>' + Math.round(t.mean) + '/100</strong> (±' + t.sd + '); ' + G.pct(t.pAbove) + ' chance each is ' + esc(t.trait.label) + '.</p>';
+    });
+    return out;
   }
 
   /* ---------- Incubation ---------- */
@@ -484,12 +540,12 @@
       else {
         var good = p.eggs.filter(function (e) { return e.status === 'good'; });
         var left = T.incubationWeeks - p.weeksInStage;
-        body = '<p><strong>' + esc(p.maleName) + ' × ' + esc(p.femaleName) + '</strong> · laid week ' + p.layWeek + ' · ' + good.length + ' developing' + (p.slugs ? ', ' + p.slugs + ' infertile removed' : '') + '</p>' +
+        body = '<p><strong>' + esc(p.maleName) + ' × ' + esc(p.femaleName) + '</strong> · laid week ' + p.layWeek + ' · ' + good.length + ' developing' + (p.slugs ? ', ' + p.slugs + ' infertile removed' : '') + (p.nonViable ? ', ' + p.nonViable + ' non-viable (lethal combination)' : '') + '</p>' +
           '<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="' + T.incubationWeeks + '" aria-valuenow="' + p.weeksInStage + '" aria-label="Incubation progress"><div style="width:' + (p.weeksInStage / T.incubationWeeks * 100) + '%"></div></div>' +
           '<p class="small">' + (left <= 1 ? '🐣 Hatching next week!' : left + ' weeks until hatching') + '</p>' +
           '<ul class="eggs">' + p.eggs.map(function (egg, i) {
             var lvl = egg.status === 'failed' ? 'bad' : egg.health >= 70 ? 'good' : egg.health >= 40 ? 'warn' : 'bad';
-            return '<li class="egg">' + SB.art.eggSVG(egg) + '<span class="small">Egg ' + (i + 1) + '</span>' + chip(lvl, egg.status === 'failed' ? 'Stopped' : Math.round(egg.health) + '%') + '</li>';
+            return '<li class="egg">' + SB.art.eggSVG(egg) + '<span class="small">Egg ' + (i + 1) + '</span>' + chip(lvl, egg.lethal ? 'Non-viable' : egg.status === 'failed' ? 'Stopped' : Math.round(egg.health) + '%') + '</li>';
           }).join('') + '</ul>';
       }
       return '<section class="card incubator" aria-labelledby="h-' + inc.id + '"><h2 id="h-' + inc.id + '">' + esc(inc.name) + '</h2>' +
@@ -563,6 +619,7 @@
       var label = b ? G.morphLabel(b.genotype) : (p.hatchLabels && p.hatchLabels[i]) || 'Rehomed';
       counts[label] = (counts[label] || 0) + 1;
     });
+    if (p.nonViable) counts[G.LETHAL_LABEL] = p.nonViable;
     var labels = {};
     p.predicted.forEach(function (o) { labels[o.label] = true; });
     Object.keys(counts).forEach(function (l) { labels[l] = true; });
@@ -571,7 +628,8 @@
       '<table class="outcomes compare"><thead><tr><th scope="col">Morph</th><th scope="col">Predicted</th><th scope="col">Hatched</th></tr></thead><tbody>' +
       Object.keys(labels).map(function (l) {
         var pr = p.predicted.find(function (o) { return o.label === l; });
-        return '<tr><th scope="row">' + esc(l) + '</th><td>' + (pr ? G.pct(pr.prob) + ' <span class="muted small">(≈' + U.round(pr.prob * n, 1) + ')</span>' : '—') + '</td><td><strong>' + (counts[l] || 0) + '</strong></td></tr>';
+        var eggs = n + (p.nonViable || 0); // predictions are per fertile egg, including non-viable ones
+        return '<tr><th scope="row">' + esc(l) + '</th><td>' + (pr ? G.pct(pr.prob) + ' <span class="muted small">(≈' + U.round(pr.prob * eggs, 1) + ')</span>' : '—') + '</td><td><strong>' + (pr && pr.other ? '—' : counts[l] || 0) + '</strong></td></tr>';
       }).join('') + '</tbody></table>' +
       '<p class="small muted">Differences between predicted and actual are normal: each egg is an independent roll. Hatchlings need to eat on their own (feed them after a week) before they can go to new homes.</p>';
   };
@@ -579,13 +637,14 @@
   /* ---------- Morph Book ---------- */
 
   ui.clue = function (genotype) {
-    var parts = [];
-    SB.GENES.forEach(function (g) {
-      var c = genotype[g.id] || 0;
-      if (!c) return;
-      if (g.type === 'codominant') parts.push(c === 2 ? 'two copies of ' + g.name + ' (one from each parent)' : 'one copy of ' + g.name);
+    var parts = [], geno = G.norm(genotype);
+    G.activeLoci(geno).forEach(function (L) {
+      var pair = geno[L], a = pair[0] || pair[1], b = pair[0] && pair[1];
+      var g = G.gene(a);
+      if (b && a !== b) parts.push('one copy each of ' + g.name + ' and ' + G.gene(b).name + ' (one from each parent)');
+      else if (g.type === 'codominant') parts.push(b ? 'two copies of ' + g.name + ' (one from each parent)' : 'one copy of ' + g.name);
       else if (g.type === 'dominant') parts.push(g.name + ' from either parent');
-      else parts.push('two copies of ' + g.name + ' (both parents must carry it)');
+      else parts.push(b ? 'two copies of ' + g.name + ' (both parents must carry it)' : 'a hidden copy of ' + g.name);
     });
     return parts.length ? 'Needs ' + parts.join(' + ') + '.' : 'A hatchling with no visual morph genes.';
   };
@@ -626,7 +685,8 @@
 
   ui.bookSlot = function (state, page, slot) {
     var pairs = sim.pairsFor(state, slot.genotype);
-    var needed = SB.GENES.filter(function (g) { return slot.genotype[g.id]; }).map(function (g) { return g.name; });
+    var slotGeno = G.norm(slot.genotype), needed = [];
+    Object.keys(slotGeno).forEach(function (L) { slotGeno[L].forEach(function (a) { if (a && needed.indexOf(G.gene(a).name) < 0) needed.push(G.gene(a).name); }); });
     var ghost = { id: 'ghost-dlg-' + slot.name, name: slot.name, genotype: slot.genotype, ageWeeks: 120, temperament: 'Calm' };
     return '<div class="slot-detail"><div class="sticker-art silhouette slot-art">' + SB.art.snakeSVG(ghost, { suffix: 's', label: '' }) + '<span class="sticker-q" aria-hidden="true">?</span></div>' +
       '<div><p><strong>' + esc(ui.clue(slot.genotype)) + '</strong></p><p class="small muted">Page: ' + esc(page.title) + '. Hatch one to fill this slot.</p>' +
@@ -765,30 +825,60 @@
         '<li><strong>Visual</strong> means you can see the trait. <strong>Het</strong> means an invisible single copy of a recessive gene.</li>' +
         '<li><strong>Possible hets</strong>: when two hets breed, a normal-looking baby has a 2-in-3 chance of being het — shown as “66% poss. het”. Only future breeding can prove it.</li>' +
       '</ul>' +
+      '<h3>Beyond the basics</h3><ul>' +
+        '<li><strong>Allelic genes</strong> (e.g. Mojave and Lesser in the BEL complex) sit at the same spot on the chromosome, so a snake carries at most two of them. One of each can make a special combination — Mojave + Lesser is a Blue-Eyed Leucistic.</li>' +
+        '<li><strong>Lethal combinations</strong>: some genes can’t be doubled up (two copies of Champagne never develop). The breeding preview shows these as “non-viable” eggs.</li>' +
+        '<li><strong>Welfare flags</strong>: some genes come with health issues, like the neurological “wobble” in Spider. They’re shown on snakes and in previews. Producing and selling affected animals earns less goodwill.</li>' +
+        '<li><strong>Sex-linked genes</strong>: ball pythons are XY. Banana sits close to the sex-determining region, so a Banana male passes it mostly to sons (“male maker”) or to daughters (“female maker”), depending on which parent gave it to him.</li>' +
+        '<li><strong>Line-bred traits</strong> such as contrast aren’t single genes. Babies average their parents’ scores, give or take, so it takes generations of selection to raise them.</li>' +
+        '<li><strong>Designer names</strong>: popular combinations have trade names — Pastel + Spider is a Bumblebee, Pastel + Pinstripe a Lemon Blast.</li>' +
+      '</ul>' +
       '<h3>Why results differ from the odds</h3><p>Percentages are per egg. A clutch of 6 from a 25% pairing averages 1.5 visuals, but 0, 1, 2 or even 4 are all perfectly possible. Over many clutches, results approach the predictions.</p>' +
       '<h3>Morphs in this game</h3><ul>' + SB.GENES.map(function (g) {
-        return '<li><strong>' + esc(g.name) + '</strong> <span class="muted">(' + typeName(g.type) + (g.superName ? '; super form: ' + esc(g.superName) : '') + ')</span> — ' + esc(g.blurb) + '</li>';
+        var locus = G.locus(G.locusOf(g.id)), extra = [];
+        if (g.superName) extra.push((g.superLethal ? 'two copies are lethal' : 'super form: ' + g.superName));
+        else if (g.superLethal) extra.push('two copies are lethal');
+        if (locus.alleles.length > 1) extra.push('allelic with ' + locus.alleles.filter(function (x) { return x !== g; }).map(function (x) { return x.name; }).join(', '));
+        if (g.linkage) extra.push(g.linkage.to === 'sex' ? 'sex-linked' : 'linked to ' + g.linkage.to);
+        if (g.health) extra.push('welfare: ' + g.health.issue);
+        return '<li><strong>' + esc(g.name) + '</strong> <span class="muted">(' + typeName(g.type) + (extra.length ? '; ' + esc(extra.join('; ')) : '') + ')</span> — ' + esc(g.blurb) + '</li>';
+      }).join('') + (SB.ALLELE_COMBOS || []).map(function (c) {
+        return '<li><strong>' + esc(c.name) + '</strong> <span class="muted">(' + esc(c.pair.map(function (id) { return G.gene(id).name; }).join(' + ')) + ')</span> — ' + esc(c.blurb || '') + '</li>';
       }).join('') + '</ul>' +
       '<h3>Welfare notes</h3><ul><li>Poor conditions raise stress and lower health, which reduces breeding success and egg quality.</li><li>Gravid females often refuse food — that’s normal. Feed them well after laying; they need ' + T.postLayRecoveryWeeks + ' weeks to recover before breeding again.</li><li>Low humidity causes stuck sheds. Hatchlings must be eating before they go to new homes.</li><li>Neglected, unhealthy animals cost you reputation.</li></ul>' +
-      '<div class="note"><strong>About this model:</strong> this is a deliberately simplified teaching model. Real ball python genetics include allelic groups (e.g. the BEL complex), linked genes, genes with health concerns, and incomplete knowledge of some traits. Each gene here is treated as an independent, single-locus trait with simple inheritance, and time is heavily compressed.</div>' +
+      '<div class="note"><strong>About this model:</strong> this is still a simplified teaching model. It covers allelic groups, lethal combinations, gene-linked health issues, sex linkage and simple line-bred traits, but real genetics has more nuance (and some morphs are still poorly understood). Time is heavily compressed.</div>' +
       '</div>';
+  }
+
+  /* Picker options for one locus: every non-lethal pair; phase matters for sex-linked loci in males. */
+  function calcOptions(L, sex) {
+    var out = [];
+    G.locusPairs(L).forEach(function (p) {
+      var name = p.pair[0] || p.pair[1] ? G.pairName(L, p.pair) : 'Normal (not carrying)';
+      var a = p.pair[0], b = p.pair[1];
+      if (G.isSexLinked(L) && sex === 'M' && a !== b) {
+        out.push({ key: G.pairKey(L, [b, a]), name: name + ' — on Y (male maker)' });
+        out.push({ key: G.pairKey(L, [a, b]), name: name + ' — on X (female maker)' });
+      } else out.push({ key: G.pairKey(L, [a, b]), name: name });
+    });
+    return out;
   }
 
   function calculator(uis) {
     var calc = uis.calc || { male: {}, female: {} };
+    var geno = { male: G.norm(calc.male), female: G.norm(calc.female) };
     function side(key, title) {
-      return '<fieldset class="calc-side"><legend>' + title + '</legend>' + SB.GENES.map(function (g) {
-        var v = calc[key][g.id] || 0;
-        var opts = g.type === 'recessive' ? [[0, 'Not carrying'], [1, 'Het (carrier)'], [2, 'Visual']] :
-          g.type === 'dominant' ? [[0, 'None'], [1, 'Visual (1 copy)'], [2, 'Visual (2 copies)']] : [[0, 'None'], [1, g.name], [2, g.superName]];
-        return '<label class="calc-row"><span>' + esc(g.name) + '</span><select data-change="calc" data-side="' + key + '" data-gene="' + g.id + '">' + opts.map(function (o) {
-          return '<option value="' + o[0] + '"' + (o[0] === v ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+      var sex = key === 'male' ? 'M' : 'F';
+      return '<fieldset class="calc-side"><legend>' + title + '</legend>' + G.loci().map(function (loc) {
+        var L = loc.id, v = G.pairKey(L, geno[key][L] || [null, null]);
+        return '<label class="calc-row"><span>' + esc(G.locusName(L)) + '</span><select data-change="calc" data-side="' + key + '" data-locus="' + L + '">' + calcOptions(L, sex).map(function (o) {
+          return '<option value="' + esc(o.key) + '"' + (o.key === v ? ' selected' : '') + '>' + esc(o.name) + '</option>';
         }).join('') + '</select></label>';
       }).join('') + '</fieldset>';
     }
-    var pred = G.predict({ genotype: calc.male, knowledge: G.exactKnowledge(calc.male) }, { genotype: calc.female, knowledge: G.exactKnowledge(calc.female) });
+    var pred = G.predict(exSnake(geno.male, 'M'), exSnake(geno.female, 'F'));
     return '<p class="small">Experiment with any combination — no snakes needed. Parents here are treated as proven.</p><div class="calc">' + side('male', '♂ Parent 1') + side('female', '♀ Parent 2') + '</div>' +
-      '<h3>Per-egg odds</h3>' + ui.outcomeTable(pred, 0) + btn('Reset calculator', 'calc-reset', '', 'btn-small btn-ghost');
+      '<h3>Per-egg odds</h3>' + ui.outcomeTable(pred, 0, 20) + predictionWarnings(pred) + btn('Reset calculator', 'calc-reset', '', 'btn-small btn-ghost');
   }
 
   SB.ui = ui;

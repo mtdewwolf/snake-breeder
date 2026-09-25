@@ -61,15 +61,10 @@
 
   /* Market value, based on what can be proven about the snake (knowledge), not hidden truth. */
   sim.value = function (state, snake) {
-    var v = 60;
-    SB.GENES.forEach(function (gene) {
-      var d = G.distOf(snake, gene.id);
-      var cls = G.visualClass(gene, snake.genotype[gene.id] || 0);
-      if (cls === 'single' || cls === 'visual') v += gene.value;
-      if (cls === 'super') v += gene.superValue;
-      if (gene.type === 'recessive' && cls === 'none') v += (gene.hetValue || 0) * (d[1] + d[2]);
-    });
-    var geneCount = G.visualGenes(snake.genotype).length;
+    // Visual forms, proven/possible hets (weighted by their odds) and designer-name bonuses.
+    var v = 60 + G.geneticValue(snake);
+    G.traitBadges(snake).forEach(function (b) { v += b.trait.value || 0; });
+    var geneCount = G.visualForms(snake.genotype).length;
     if (geneCount >= 2) v *= 1 + 0.25 * (geneCount - 1); // combos are in demand
     if (snake.sex === 'F') v *= 1.2;
     if (snake.ageWeeks >= 104) v *= 1.4; else if (snake.ageWeeks >= 52) v *= 1.2;
@@ -303,8 +298,14 @@
       id: SB.state.nextId(state, 'pr'),
       maleId: m.id, femaleId: f.id, maleName: m.name, femaleName: f.name,
       stage: 'pairing', weeksInStage: 0, startWeek: state.week, incubatorId: inc.id,
-      eggs: [], slugs: 0,
-      predicted: pred.outcomes.map(function (o) { return { label: o.label, prob: o.prob }; }),
+      eggs: [], slugs: 0, nonViable: 0,
+      // Stored for the hatch comparison and rarity; long tails are folded into "Other combinations".
+      predicted: G.topOutcomes(pred, 40).map(function (o) {
+        var r = { label: o.label, prob: o.prob };
+        if (o.lethal) r.lethal = true;
+        if (o.other) r.other = true;
+        return r;
+      }),
       babies: []
     };
     state.projects.push(p);
@@ -368,9 +369,12 @@
     var babies = [];
     p.eggs.forEach(function (egg) {
       if (egg.status !== 'good') return;
+      var sex = egg.sex || (U.rand() < 0.5 ? 'M' : 'F'); // eggs from older saves have no rolled sex
       var baby = SB.state.makeSnake(state, {
+        sex: sex,
         genotype: egg.genotype,
-        knowledge: G.inferKnowledge(m, f, egg.genotype),
+        knowledge: G.inferKnowledge(m, f, egg.genotype, sex),
+        traits: egg.traits || G.rollTraits(m, f, U.rand),
         ageWeeks: 0, weight: U.randInt(58, 90),
         health: Math.round(U.clamp(55 + egg.health * 0.45, 40, 100)),
         stress: 20, hunger: 30, mealsEaten: 0, weeksSinceShed: 0,
@@ -391,10 +395,25 @@
     p.revealed = [];
     state.stats.hatched += babies.length;
     if (babies.length) state.reputation += 1;
+    welfareAtHatch(state, p, babies);
     state.lastHatch = { projectId: p.id, week: state.week, seen: false };
     var homeless = babies.filter(function (b) { return !b.enclosureId; }).length;
     sim.log(state, babies.length + ' egg' + (babies.length === 1 ? ' is' : 's are') + ' pipping in the ' + p.maleName + ' × ' + p.femaleName + ' clutch. Crack them open to meet your hatchlings!', 'good');
     if (homeless) sim.log(state, homeless + ' hatchling' + (homeless === 1 ? ' is' : 's are') + ' in temporary holding tubs. Buy tubs or find them homes soon — cramped holding adds stress.', 'warn');
+  }
+
+  /* Gentle welfare feedback when a clutch includes babies with gene-linked health issues. */
+  function welfareAtHatch(state, p, babies) {
+    var issues = [];
+    babies.forEach(function (b) { issues = issues.concat(G.healthIssues(b.genotype, b.sex)); });
+    if (!issues.length) return;
+    var worst = G.worstSeverity(issues);
+    var names = {};
+    issues.forEach(function (i) { names[i.issue + ' (' + i.source + ')'] = true; });
+    var delta = (SB.WELFARE && SB.WELFARE.hatchRep[worst]) || 0;
+    state.reputation = Math.max(0, state.reputation + delta);
+    sim.log(state, 'Some hatchlings from ' + p.maleName + ' × ' + p.femaleName + ' have a gene-linked health issue: ' + Object.keys(names).join(', ') +
+      '. They’ll need gentle handling and honest disclosure to their new keepers.' + (delta ? ' (' + delta + ' reputation)' : ''), 'warn');
   }
 
   /* ---------- Hatch reveal ---------- */
@@ -423,6 +442,7 @@
   sim.rarity = function (p, label) {
     var o = (p.predicted || []).find(function (x) { return x.label === label; });
     var prob = o ? o.prob : 0;
+    if (!prob && (p.predicted || []).some(function (x) { return x.other; })) return { tier: 'jackpot', prob: 0, text: 'Jackpot! A rare combination' };
     if (!prob) return { tier: 'jackpot', prob: 0, text: 'Unexpected!' };
     if (prob <= 0.07) return { tier: 'jackpot', prob: prob, text: 'Jackpot! 1 in ' + Math.round(1 / prob) };
     if (prob <= 0.2) return { tier: 'rare', prob: prob, text: 'Rare hatch · 1 in ' + Math.round(1 / prob) };
@@ -440,7 +460,7 @@
   function recordDiscovery(state, baby) {
     var label = G.morphLabel(baby.genotype);
     if (state.discoveries.some(function (d) { return d.label === label; })) return null;
-    var d = { label: label, week: state.week, genes: G.visualGenes(baby.genotype), by: baby.name, snakeId: baby.id, genotype: Object.assign({}, baby.genotype) };
+    var d = { label: label, week: state.week, genes: G.visualGenes(baby.genotype), by: baby.name, snakeId: baby.id, genotype: G.norm(baby.genotype) };
     state.discoveries.push(d);
     var inBook = sim.bookSlotFor(label);
     sim.log(state, 'New discovery: your first ' + label + ' (' + baby.name + ')!' + (inBook ? ' A new sticker for your Morph Book.' : ''), 'good');
@@ -505,15 +525,15 @@
 
   /* Best pairings in the collection for producing a morph, by per-egg chance. */
   sim.pairsFor = function (state, genotype) {
-    var label = G.morphLabel(genotype);
     var pool = state.snakes.filter(function (s) { return !sim.isUnrevealed(state, s); });
     var males = pool.filter(function (s) { return s.sex === 'M'; }), females = pool.filter(function (s) { return s.sex === 'F'; });
     var out = [];
     males.forEach(function (m) {
       females.forEach(function (f) {
         if (sim.related(m, f)) return;
-        var o = G.predict(m, f).outcomes.find(function (x) { return x.label === label; });
-        if (o) out.push({ male: m, female: f, prob: o.prob, ready: sim.eligibility(state, m).ok && sim.eligibility(state, f).ok });
+        // Per-locus odds of the slot's look: fast even when parents carry many genes.
+        var prob = G.probOf(m, f, genotype);
+        if (prob > 1e-9) out.push({ male: m, female: f, prob: prob, ready: sim.eligibility(state, m).ok && sim.eligibility(state, f).ok });
       });
     });
     return out.sort(function (a, b) { return (b.ready - a.ready) || (b.prob - a.prob); }).slice(0, 4);
@@ -528,28 +548,46 @@
     if (c.visual === 'normal' && vis.length) return false;
     if (c.visual && c.visual !== 'normal' && vis.indexOf(c.visual) < 0) return false;
     if (c.visual2 && vis.indexOf(c.visual2) < 0) return false;
-    if (c.carries) {
-      var d = G.distOf(snake, c.carries);
-      if (d[1] + d[2] < 0.5) return false;
-    }
+    if (c.carries && G.carryProb(snake, c.carries) < 0.5) return false;
     return true;
   };
 
+  /*
+   * A random market animal. Each locus is involved with a chance scaled so the
+   * average animal carries about two genes however large the gene list grows.
+   * Genes with `market: 0` never appear; `market` is otherwise a relative weight.
+   */
   function randomGenotype() {
-    var geno = {}, know = {};
-    SB.GENES.forEach(function (gene) {
-      var r = U.rand();
+    var geno = {}, poss = {};
+    var loci = G.loci().filter(function (loc) { return loc.alleles.some(function (g) { return g.market !== 0; }); });
+    var pLocus = Math.min(0.35, 2.4 / Math.max(1, loci.length));
+    loci.forEach(function (loc) {
+      if (U.rand() >= pLocus) return;
+      var pool = loc.alleles.filter(function (g) { return g.market !== 0; });
+      var total = pool.reduce(function (s, g) { return s + (g.market || 1); }, 0), r = U.rand() * total, gene = pool[0];
+      for (var i = 0; i < pool.length; i++) { r -= pool[i].market || 1; if (r < 0) { gene = pool[i]; break; } }
+      var pair = [gene.id, null];
       if (gene.type === 'recessive') {
-        if (r < 0.1) { geno[gene.id] = 2; know[gene.id] = G.exact(2); }
-        else if (r < 0.3) { geno[gene.id] = 1; know[gene.id] = G.exact(1); }
-        else if (r < 0.42) { // advertised as 50% possible het; truth is rolled
-          if (U.rand() < 0.5) geno[gene.id] = 1;
-          know[gene.id] = [0.5, 0.5, 0];
+        var q = U.rand();
+        if (q < 0.24) pair = [gene.id, gene.id];
+        else if (q >= 0.71) { // advertised as 50% possible het; truth is rolled
+          poss[loc.id] = gene.id;
+          if (U.rand() < 0.5) pair = [null, null];
         }
-      } else if (r < 0.22) {
-        geno[gene.id] = gene.type === 'codominant' && U.rand() < 0.12 ? 2 : 1;
-        know[gene.id] = G.exact(geno[gene.id]);
+      } else if (gene.type === 'codominant' && !gene.superLethal && U.rand() < 0.12) {
+        pair = [gene.id, gene.id];
+      } else if (pool.length > 1 && U.rand() < 0.15) {
+        var mate = U.pick(pool.filter(function (g) { return g !== gene && g.type !== 'recessive'; }));
+        var test = {}; test[loc.id] = [gene.id, mate && mate.id];
+        if (mate && !G.isLethal(test)) pair = [gene.id, mate.id];
       }
+      if (U.rand() < 0.5) pair = [pair[1], pair[0]]; // which parent it came from is random
+      if (pair[0] || pair[1]) geno[loc.id] = pair;
+    });
+    var know = G.exactKnowledge(geno);
+    Object.keys(poss).forEach(function (L) {
+      var legacy = {}; legacy[poss[L]] = [0.5, 0.5, 0];
+      know[L] = G.normKnowledge(legacy)[L];
     });
     return { genotype: geno, knowledge: know };
   }
@@ -590,7 +628,7 @@
       mk.listings.push({ id: SB.state.nextId(state, 'ls'), seller: 'Greenleaf Reptile Shop', snake: fem, price: Math.round(sim.value(state, fem) * 1.15 / 5) * 5 });
       mk.listings.push(makeListing(state));
       var tsnake = SB.state.makeSnake(state, { genotype: {}, knowledge: { clown: [0, 1, 0] }, sex: 'F', ageWeeks: 120, weight: 1520, origin: 'Traded', health: 90 });
-      tsnake.genotype = { clown: 1 };
+      tsnake.genotype = G.norm({ clown: 1 });
       mk.trades.push({ id: SB.state.nextId(state, 'tr'), trader: 'The Coil Club', text: 'Will trade an adult female het Clown for any Pinstripe.', criteria: { visual: 'pinstripe' }, snake: tsnake, expires: 40 });
       return;
     }
@@ -627,12 +665,15 @@
       state.stats.requestsFilled += 1;
       state.market.requests = state.market.requests.filter(function (r) { return r.id !== req.id; });
     }
-    state.reputation += repGain;
+    // Rehoming an animal with a gene-linked health issue earns less goodwill.
+    var worst = G.worstSeverity(G.healthIssues(s.genotype, s.sex));
+    if (worst && SB.WELFARE) repGain += SB.WELFARE.saleRep[worst] || 0;
+    state.reputation = Math.max(0, state.reputation + repGain);
     removeSnake(state, s);
     sim.markTutorial(state, 'market');
     var who = req ? req.buyer : 'a vetted buyer';
     sim.log(state, s.name + ' (' + G.fullLabel(s) + ') went to a new home with ' + who + ' for ' + U.money(price) + '.', 'good');
-    return ok(s.name + ' sold to ' + who + ' for ' + U.money(price) + (repGain ? ' (+' + repGain + ' reputation)' : '') + '.');
+    return ok(s.name + ' sold to ' + who + ' for ' + U.money(price) + (repGain ? ' (' + (repGain > 0 ? '+' : '') + repGain + ' reputation)' : '') + '.');
   };
 
   sim.buy = function (state, listingId) {
@@ -814,8 +855,8 @@
         if (U.rand() < chance) {
           p.stage = 'gravid'; p.weeksInStage = 0;
           // Snapshot the parents so the clutch works even if the male later leaves the collection.
-          p.maleSnapshot = { genotype: m.genotype, knowledge: m.knowledge };
-          p.femaleSnapshot = { genotype: f.genotype, knowledge: f.knowledge };
+          p.maleSnapshot = { sex: 'M', genotype: m.genotype, knowledge: m.knowledge, traits: m.traits };
+          p.femaleSnapshot = { sex: 'F', genotype: f.genotype, knowledge: f.knowledge, traits: f.traits };
           history(state, f, 'Ovulated after pairing with ' + m.name + ' — now gravid.');
           events.push({ text: f.name + ' is gravid! Eggs expected in about ' + T.gravidWeeks + ' weeks. Keep her calm and warm.', kind: 'good' });
         } else {
@@ -826,23 +867,30 @@
         }
       } else if (p.stage === 'gravid' && p.weeksInStage >= T.gravidWeeks) {
         var size = U.clamp(Math.round(3 + (f.weight - 1500) / 180) + U.randInt(-1, 1), 2, 9);
-        var fert = U.clamp(0.72 + 0.22 * f.health / 100 - f.stress / 300, 0.4, 0.95);
-        p.eggs = []; p.slugs = 0;
+        var fert = U.clamp(0.72 + 0.22 * f.health / 100 - f.stress / 300, 0.4, 0.95) * G.fertilityFactor(f);
+        p.eggs = []; p.slugs = 0; p.nonViable = 0;
         for (var i = 0; i < size; i++) {
           if (U.rand() < fert) {
-            p.eggs.push({ id: 'e' + i, genotype: G.rollGenotype(m || p.maleSnapshot, f), health: U.clamp(U.randInt(78, 96) - Math.round(f.stress / 5), 50, 100), status: 'good' });
+            // Every fertile egg is rolled. Lethal genotypes are laid but never develop:
+            // they go into the incubator already marked as stopped.
+            var roll = G.rollEgg(m || p.maleSnapshot, f);
+            var egg = { id: 'e' + i, genotype: roll.genotype, sex: roll.sex, traits: roll.traits, health: U.clamp(U.randInt(78, 96) - Math.round(f.stress / 5), 50, 100), status: 'good' };
+            if (roll.lethal) { egg.status = 'failed'; egg.lethal = true; egg.health = 0; p.nonViable++; }
+            p.eggs.push(egg);
           } else p.slugs++;
         }
+        var goodEggs = p.eggs.length - p.nonViable;
         f.weight = Math.round(f.weight * 0.82);
         f.hunger = Math.max(f.hunger, 70);
         f.recoveryUntil = w + T.postLayRecoveryWeeks;
-        history(state, f, 'Laid ' + size + ' eggs (' + p.eggs.length + ' good, ' + p.slugs + ' infertile).');
-        if (p.eggs.length) {
+        history(state, f, 'Laid ' + size + ' eggs (' + goodEggs + ' good, ' + p.slugs + ' infertile' + (p.nonViable ? ', ' + p.nonViable + ' non-viable' : '') + ').');
+        var nvText = p.nonViable ? ' ' + p.nonViable + ' fertile egg' + (p.nonViable === 1 ? '' : 's') + ' won’t develop — a lethal gene combination.' : '';
+        if (goodEggs) {
           p.stage = 'incubating'; p.weeksInStage = 0; p.layWeek = w;
-          events.push({ text: f.name + ' laid ' + size + ' eggs: ' + p.eggs.length + ' good' + (p.slugs ? ' and ' + p.slugs + ' infertile slug' + (p.slugs === 1 ? '' : 's') : '') + '. They’re in the incubator. Offer her a meal to recover.', kind: 'good' });
+          events.push({ text: f.name + ' laid ' + size + ' eggs: ' + goodEggs + ' good' + (p.slugs ? ' and ' + p.slugs + ' infertile slug' + (p.slugs === 1 ? '' : 's') : '') + '.' + nvText + ' They’re in the incubator. Offer her a meal to recover.', kind: 'good' });
         } else {
           p.stage = 'failed';
-          events.push({ text: f.name + ' laid only infertile eggs this time. She needs rest and meals to recover.', kind: 'warn' });
+          events.push({ text: f.name + ' laid no eggs that can develop this time.' + nvText + ' She needs rest and meals to recover.', kind: 'warn' });
         }
       } else if (p.stage === 'incubating') {
         var inc = state.incubators.find(function (x) { return x.id === p.incubatorId; });

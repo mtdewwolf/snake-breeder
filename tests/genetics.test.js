@@ -57,22 +57,22 @@ test('possible het parent is handled by knowledge', () => {
 
 test('rolled genotypes respect parents (visual x visual recessive always visual)', () => {
   for (let i = 0; i < 200; i++) {
-    assert.strictEqual(G.rollGenotype(snake({ albino: 2 }), snake({ albino: 2 })).albino, 2);
-    assert.ok(!G.rollGenotype(snake({}), snake({})).pastel);
+    assert.strictEqual(G.copies(G.rollGenotype(snake({ albino: 2 }), snake({ albino: 2 })), 'albino'), 2);
+    assert.strictEqual(G.copies(G.rollGenotype(snake({}), snake({})), 'pastel'), 0);
   }
 });
 
 test('rolled frequencies approximate predictions', () => {
   let clowns = 0; const n = 20000;
-  for (let i = 0; i < n; i++) if (G.rollGenotype(snake({ clown: 1 }), snake({ clown: 1 })).clown === 2) clowns++;
+  for (let i = 0; i < n; i++) if (G.copies(G.rollGenotype(snake({ clown: 1 }), snake({ clown: 1 })), 'clown') === 2) clowns++;
   assert.ok(Math.abs(clowns / n - 0.25) < 0.015);
 });
 
 test('inferred hatchling knowledge', () => {
   const k = G.inferKnowledge(snake({ albino: 2 }), snake({}), { albino: 1 });
-  assert.deepStrictEqual(k.albino, [0, 1, 0]);
+  assert.deepStrictEqual(k.albino, { '+/albino': 1 });
   const k2 = G.inferKnowledge(snake({ clown: 1 }), snake({ clown: 1 }), { clown: 1 });
-  near(k2.clown[1], 2 / 3);
+  near(k2.clown['+/clown'], 2 / 3);
 });
 
 test('a full game loop runs: pair, lay, incubate, hatch, sell', () => {
