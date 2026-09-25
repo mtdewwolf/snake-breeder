@@ -92,3 +92,32 @@ test('an automatic keeper plays 160 weeks without errors', () => {
     G.rng = orig;
   }
 });
+
+test('collection dashboard, search filters, and snake records show useful collection facts', () => {
+  const state = SB.state.newGame();
+  const allHtml = ui.collection(state, { filter: 'all', sort: 'name' });
+  assert.match(allHtml, /Collection at a glance/);
+  assert.match(allHtml, /Snake records<\/span><span class="tile-value">4/);
+  assert.match(allHtml, /data-change="collection-search"/);
+  assert.match(allHtml, /data-change="collection-filter"/);
+
+  const morphSearch = ui.collection(state, { filter: 'all', sort: 'name', query: 'pinstripe' });
+  assert.match(morphSearch, /Juniper/);
+  assert.doesNotMatch(morphSearch, /Biscuit/);
+  const males = ui.collection(state, { filter: 'M', sort: 'name' });
+  assert.match(males, /Biscuit/);
+  assert.doesNotMatch(males, /Marigold/);
+
+  const record = ui.snakeDetail(state, state.snakes.find((s) => s.name === 'Biscuit'));
+  assert.match(record, /Record ID/);
+  assert.match(record, /Enclosure A/);
+  assert.match(record, /Recorded milestones/);
+  assert.match(record, /starter group/);
+
+  const hidden = SB.state.makeSnake(state, { name: 'Secret hatchling', sex: 'F', ageWeeks: 0, origin: 'Hatched' });
+  state.snakes.push(hidden);
+  state.projects.push({ stage: 'done', babies: [hidden.id], revealed: [] });
+  const femaleFilter = ui.collection(state, { filter: 'F', sort: 'name' });
+  assert.doesNotMatch(femaleFilter, /Secret hatchling/);
+  assert.match(ui.collection(state, { filter: 'all', sort: 'name' }), /Eggs to reveal/);
+});

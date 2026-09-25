@@ -414,14 +414,35 @@
   }
   ui.snakeCard = snakeCard;
 
+  function needsAttention(state, s) {
+    var e = sim.enclosureOf(state, s);
+    return s.hunger >= 35 || s.health < 60 || s.stress > 50 || !s.enclosureId || (e && envIssues(e, s).length > 0);
+  }
+
   ui.collection = function (state, uis) {
-    var list = state.snakes.slice();
+    var all = state.snakes.slice();
+    var known = all.filter(function (s) { return !sim.isUnrevealed(state, s); });
     var f = uis.filter || 'all';
-    list = list.filter(function (s) {
-      if (f === 'M' || f === 'F') return s.sex === f;
-      if (f === 'breeders') return sim.eligibility(state, s).ok;
-      if (f === 'young') return s.ageWeeks < 52;
-      if (f === 'attention') return s.hunger >= 35 || s.health < 60 || s.stress > 50 || !s.enclosureId || (sim.enclosureOf(state, s) && envIssues(sim.enclosureOf(state, s), s).length);
+    var query = String(uis.query || '').trim().toLocaleLowerCase();
+    var list = all.filter(function (s) {
+      var hidden = sim.isUnrevealed(state, s);
+      if (f === 'M' || f === 'F') { if (hidden || s.sex !== f) return false; }
+      if (f === 'breeders' && (hidden || !sim.eligibility(state, s).ok)) return false;
+      if (f === 'young' && (hidden || s.ageWeeks >= 52)) return false;
+      if (f === 'adults' && (hidden || s.ageWeeks < 52)) return false;
+      if (f === 'attention' && (hidden || !needsAttention(state, s))) return false;
+      if (f === 'homeless' && (hidden || s.enclosureId)) return false;
+      if (f === 'pairing') {
+        var project = !hidden && sim.projectFor(state, s);
+        if (!project || (project.stage !== 'pairing' && project.stage !== 'gravid')) return false;
+      }
+      if (query && !hidden) {
+        var e = sim.enclosureOf(state, s);
+        var searchable = [s.name, s.id, s.sex === 'M' ? 'male' : 'female', G.fullLabel(s), s.temperament, s.origin,
+          e && e.name, s.parents && s.parents.sireName, s.parents && s.parents.damName,
+          (s.history || []).map(function (item) { return item.text; }).join(' ')].filter(Boolean).join(' ').toLocaleLowerCase();
+        if (searchable.indexOf(query) < 0) return false;
+      } else if (query && hidden && s.name.toLocaleLowerCase().indexOf(query) < 0) return false;
       return true;
     });
     var sort = uis.sort || 'name';
@@ -431,17 +452,40 @@
       if (sort === 'health') return a.health - b.health;
       return a.name.localeCompare(b.name);
     });
-    var filters = [['all', 'All'], ['attention', 'Needs care'], ['breeders', 'Ready to breed'], ['M', 'Males'], ['F', 'Females'], ['young', 'Juveniles']];
-    return '<section aria-labelledby="col-h"><div class="section-head"><h2 id="col-h">Your collection <span class="muted">(' + state.snakes.length + ')</span></h2>' +
-      '<div class="toolbar"><div class="segmented" role="group" aria-label="Filter snakes">' + filters.map(function (x) {
-        return '<button type="button" class="seg' + (x[0] === f ? ' is-active' : '') + '" aria-pressed="' + (x[0] === f) + '" data-action="filter" data-filter="' + x[0] + '">' + x[1] + '</button>';
-      }).join('') + '</div>' +
-      '<label class="inline-field">Sort <select data-change="sort">' + [['name', 'Name'], ['age', 'Age'], ['value', 'Value'], ['health', 'Health (lowest first)']].map(function (o) {
-        return '<option value="' + o[0] + '"' + (o[0] === sort ? ' selected' : '') + '>' + o[1] + '</option>';
-      }).join('') + '</select></label></div></div>' +
-      (state.snakes.length === 0 ? empty('Your collection is empty', 'Visit the Market to adopt a snake, or start a new game.', btn('Go to Market', 'view', 'data-view="market"', 'btn-small')) :
-        list.length === 0 ? empty('No snakes match this filter', 'Try another filter.') :
-        '<div class="card-grid">' + list.map(function (s) { return snakeCard(state, s); }).join('') + '</div>') +
+    var filters = [
+      ['all', 'All records'], ['attention', 'Needs care'], ['breeders', 'Ready to breed'],
+      ['M', 'Males'], ['F', 'Females'], ['young', 'Juveniles'], ['adults', 'Adults'],
+      ['homeless', 'Temporary tubs'], ['pairing', 'In pairing / gravid']
+    ];
+    var metrics = [
+      { label: 'Snake records', value: known.length, sub: 'identified animals', filter: 'all' },
+      { label: 'Males', value: known.filter(function (s) { return s.sex === 'M'; }).length, sub: 'in your collection', filter: 'M' },
+      { label: 'Females', value: known.filter(function (s) { return s.sex === 'F'; }).length, sub: 'in your collection', filter: 'F' },
+      { label: 'Ready to breed', value: known.filter(function (s) { return sim.eligibility(state, s).ok; }).length, sub: 'eligible right now', filter: 'breeders' },
+      { label: 'Needs attention', value: known.filter(function (s) { return needsAttention(state, s); }).length, sub: 'care or habitat issue', filter: 'attention' },
+      { label: 'Eggs to reveal', value: all.length - known.length, sub: 'hatchlings waiting', view: 'incubation' }
+    ];
+    var sortOptions = [['name', 'Name'], ['age', 'Age'], ['value', 'Value'], ['health', 'Health (lowest first)']];
+    return '<section aria-labelledby="col-h">' +
+      '<div class="collection-dashboard" aria-labelledby="collection-summary-h"><h2 id="collection-summary-h">Collection at a glance</h2>' +
+        '<div class="collection-tiles">' + metrics.map(function (m) {
+          var attrs = m.view ? 'data-action="view" data-view="' + m.view + '"' : 'data-action="filter" data-filter="' + m.filter + '"';
+          return '<button type="button" class="tile collection-tile" ' + attrs + '><span class="tile-label">' + esc(m.label) + '</span><span class="tile-value">' + m.value + '</span><span class="tile-sub">' + esc(m.sub) + '</span></button>';
+        }).join('') + '</div></div>' +
+      '<div class="section-head collection-head"><h2 id="col-h">Snake records <span class="muted">(' + known.length + ' identified · ' + (all.length - known.length) + ' eggs)</span></h2>' +
+        '<div class="collection-tools">' +
+          '<label class="collection-search">Search snakes<input type="search" data-change="collection-search" value="' + esc(uis.query || '') + '" placeholder="Name, morph, ID, enclosure" autocomplete="off"></label>' +
+          '<label class="inline-field">Filter <select data-change="collection-filter">' + filters.map(function (o) {
+            return '<option value="' + o[0] + '"' + (o[0] === f ? ' selected' : '') + '>' + o[1] + '</option>';
+          }).join('') + '</select></label>' +
+          '<label class="inline-field">Sort <select data-change="sort">' + sortOptions.map(function (o) {
+            return '<option value="' + o[0] + '"' + (o[0] === sort ? ' selected' : '') + '>' + o[1] + '</option>';
+          }).join('') + '</select></label>' +
+          ((query || f !== 'all') ? btn('Clear search & filters', 'clear-collection-filters', '', 'btn-small') : '') +
+        '</div></div>' +
+      (all.length === 0 ? empty('Your collection is empty', 'Visit the Market to adopt a snake, or start a new game.', btn('Go to Market', 'view', 'data-view="market"', 'btn-small')) :
+        list.length === 0 ? empty('No records match', 'Change the search or filter to see more snakes.') :
+        '<p class="collection-result-count" aria-live="polite">Showing ' + list.length + ' of ' + all.length + ' collection entries.</p><div class="card-grid">' + list.map(function (s) { return snakeCard(state, s); }).join('') + '</div>') +
       '</section>';
   };
 
@@ -478,14 +522,20 @@
     var forms = G.visualForms(s.genotype);
     var issues = G.healthIssues(s.genotype, s.sex);
     var parents = s.parents ? 'Offspring of <strong>' + esc(s.parents.sireName) + '</strong> × <strong>' + esc(s.parents.damName) + '</strong>' + (s.hatchWeek ? ', hatched week ' + s.hatchWeek : '') + '.' : 'Origin: ' + esc(s.origin) + '.';
+    var historyItems = (s.history || []).slice(0, 8);
+    var historyHtml = historyItems.length ? '<ol class="record-history">' + historyItems.map(function (item) {
+      return '<li><span class="record-week">Week ' + item.week + '</span><span>' + esc(item.text) + '</span></li>';
+    }).join('') + '</ol>' : '<p class="small muted">No milestone entries have been recorded yet.</p>';
 
     return '<div class="detail">' +
       '<div class="detail-side">' +
         '<div class="portrait portrait-lg">' + SB.art.snakeSVG(s, { suffix: 'd', label: 'Placeholder illustration of ' + s.name }) + '</div>' +
         '<dl class="facts">' +
+          '<div><dt>Record ID</dt><dd>' + esc(s.id) + '</dd></div>' +
           '<div><dt>Sex</dt><dd>' + sexLabel(s) + '</dd></div>' +
           '<div><dt>Age</dt><dd>' + U.age(s.ageWeeks) + '</dd></div>' +
           '<div><dt>Weight</dt><dd>' + s.weight + ' g</dd></div>' +
+          '<div><dt>Enclosure</dt><dd>' + esc(e ? e.name : 'Temporary holding') + '</dd></div>' +
           '<div><dt>Temperament</dt><dd>' + esc(s.temperament) + '</dd></div>' +
           '<div><dt>Meals eaten</dt><dd>' + s.mealsEaten + '</dd></div>' +
           '<div><dt>Est. value</dt><dd>' + U.money(sim.value(state, s)) + '</dd></div>' +
@@ -493,6 +543,13 @@
         '<form class="rename" data-form="rename" data-id="' + s.id + '"><label for="rename-' + s.id + '">Name</label><div class="rename-row"><input id="rename-' + s.id + '" name="name" maxlength="24" value="' + esc(s.name) + '" autocomplete="off"><button class="btn btn-small" type="submit">Rename</button></div></form>' +
       '</div>' +
       '<div class="detail-main">' +
+        '<section class="record-section"><h3>Record &amp; lineage</h3>' +
+          '<div class="record-summary"><div><span>Origin</span><strong>' + esc(s.origin) + '</strong></div>' +
+            '<div><span>Hatch week</span><strong>' + (s.hatchWeek ? 'Week ' + s.hatchWeek : 'Not recorded') + '</strong></div>' +
+            '<div><span>Keeper</span><strong>' + (s.keeper ? 'Favourite' : 'Not marked') + '</strong></div></div>' +
+          '<p class="record-lineage">' + parents + '</p>' +
+          '<h4>Recorded milestones</h4>' + historyHtml +
+        '</section>' +
         '<section><h3>Condition</h3>' + meter('health', 'Health', s.health) + meter('stress', 'Stress', s.stress) + meter('hunger', 'Hunger', s.hunger) +
           '<div class="btn-row">' +
             btn('🐭 Feed (' + U.money(sim.feedCost(s)) + ')', 'feed', 'data-id="' + s.id + '"', 'btn-primary btn-small') +
@@ -514,7 +571,6 @@
             return '<li><strong>' + esc(n.text) + '</strong> <span class="muted">— ' + (n.certain ? 'proven by lineage' : 'odds from lineage; only breeding can prove it') + '</span></li>';
           }).join('') + '</ul>' +
           (issues.length ? '<h4>Welfare</h4><ul class="gene-list welfare">' + welfareList(issues) + '</ul>' : '') +
-          '<p class="small muted">' + parents + '</p>' +
           '<p class="small">' + (elig.ok ? chip('good', 'Eligible to breed') : chip('warn', 'Not breeding-ready') + ' ' + esc(elig.reasons.join('; ')) + '.') + '</p>' +
         '</section>' +
         '<section><h3>Enclosure' + (e ? ': ' + esc(e.name) + ' <span class="muted small">(' + (e.kind === 'tub' ? 'hatchling tub' : 'adult enclosure') + ')</span>' : '') + '</h3>' +
@@ -526,9 +582,6 @@
           (sell.ok ? '<p>Estimated sale price <strong>' + U.money(sim.value(state, s)) + '</strong>.</p>' + btn('Sell ' + esc(s.name) + '…', 'sell', 'data-id="' + s.id + '"', 'btn-small') :
             '<p class="small">' + chip('warn', 'Not ready for a new home') + ' ' + esc(sell.reasons.join('; ')) + '.</p>') +
         '</section>' +
-        '<section><h3>History</h3><ul class="history">' + s.history.slice(0, 12).map(function (h) {
-          return '<li><span class="log-week">Wk ' + h.week + '</span> ' + esc(h.text) + '</li>';
-        }).join('') + '</ul></section>' +
       '</div></div>';
   };
 
