@@ -14,6 +14,7 @@
     { id: 'collection', label: 'Collection', icon: '🐍' },
     { id: 'breeding', label: 'Breeding', icon: '🧬' },
     { id: 'incubation', label: 'Incubation', icon: '🥚' },
+    { id: 'book', label: 'Morph Book', icon: '📘' },
     { id: 'market', label: 'Market', icon: '🏷️' },
     { id: 'facility', label: 'Facility', icon: '🛠️' },
     { id: 'journal', label: 'Journal', icon: '📖' }
@@ -120,7 +121,7 @@
 
   ui.renderTabs = function (current, state) {
     var badges = {
-      incubation: sim.activeProjects(state).filter(function (p) { return p.stage === 'incubating'; }).length,
+      incubation: sim.activeProjects(state).filter(function (p) { return p.stage === 'incubating'; }).length + sim.pendingReveals(state).length,
       collection: state.snakes.length
     };
     return ui.VIEWS.map(function (v) {
@@ -196,6 +197,8 @@
     var active = sim.activeProjects(state);
     var free = sim.freeEnclosures(state).length;
     var lastHatch = state.lastHatch && state.projects.find(function (p) { return p.id === state.lastHatch.projectId; });
+    var pending = sim.pendingReveals(state);
+    var pendingEggs = pending.reduce(function (n, p) { return n + sim.unrevealedCount(state, p); }, 0);
     return '<div class="grid-overview">' +
       '<section class="tiles" aria-label="Operation summary">' +
         tile('Funds', U.money(state.money), 'Earn by selling healthy snakes') +
@@ -203,9 +206,10 @@
         tile('Housing', (state.enclosures.length - free) + ' / ' + state.enclosures.length, free + ' free enclosure' + (free === 1 ? '' : 's')) +
         tile('Breeding', active.length + ' active', sim.freeIncubators(state).length + ' of ' + state.incubators.length + ' incubator' + (state.incubators.length === 1 ? '' : 's') + ' free') +
       '</section>' +
+      (pending.length ? '<section class="card reveal-banner"><div class="reveal-banner-eggs" aria-hidden="true">' + bigEgg('ov1') + bigEgg('ov2') + '</div><div><h2>Eggs are pipping!</h2><p>' + pendingEggs + ' hatchling' + (pendingEggs === 1 ? ' is' : 's are') + ' waiting inside ' + (pendingEggs === 1 ? 'its egg' : 'their eggs') + '. Crack them open to see what you bred.</p>' + btn('Crack them open', 'hatch-results', 'data-id="' + pending[0].id + '"', 'btn-primary') + '</div></section>' : '') +
       goalCard(state) +
       tutorialCard(state) +
-      (lastHatch ? '<section class="card hatch-banner"><h2>🐣 Latest hatch · week ' + state.lastHatch.week + '</h2><p>' + lastHatch.babies.length + ' hatchlings from ' + esc(lastHatch.maleName) + ' × ' + esc(lastHatch.femaleName) + '.</p>' + btn('See hatch results', 'hatch-results', 'data-id="' + lastHatch.id + '"', 'btn-small') + '</section>' : '') +
+      (!pending.length && lastHatch ? '<section class="card hatch-banner"><h2>🐣 Latest hatch · week ' + state.lastHatch.week + '</h2><p>' + lastHatch.babies.length + ' hatchlings from ' + esc(lastHatch.maleName) + ' × ' + esc(lastHatch.femaleName) + '.</p>' + btn('See hatch results', 'hatch-results', 'data-id="' + lastHatch.id + '"', 'btn-small') + '</section>' : '') +
       '<section class="card" aria-labelledby="att-h"><div class="card-head"><h2 id="att-h">Needs attention</h2>' + btn('🧺 Care round', 'care-round', '', 'btn-small') + '</div>' +
         (alerts.length ? '<ul class="alert-list">' + alerts.slice(0, 10).map(function (a) {
           return '<li class="alert alert-' + a.level + '">' + chip(a.level, a.level === 'bad' ? 'Urgent' : 'Check') + '<span class="alert-text">' + esc(a.text) + '</span>' + a.action + '</li>';
@@ -233,7 +237,30 @@
 
   /* ---------- Collection ---------- */
 
+  /* A decorative egg with a crack line that animates while cracking. */
+  function bigEgg(key) {
+    var id = 'eg' + key;
+    return '<svg class="big-egg" viewBox="0 0 80 96" aria-hidden="true" focusable="false">' +
+      '<defs><radialGradient id="' + id + '" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#fffdf6"/><stop offset=".7" stop-color="#f1e6cc"/><stop offset="1" stop-color="#dcc79c"/></radialGradient></defs>' +
+      '<ellipse cx="40" cy="90" rx="24" ry="4" fill="#3b2710" opacity=".15"/>' +
+      '<ellipse cx="40" cy="50" rx="29" ry="38" fill="url(#' + id + ')" stroke="#c9b287" stroke-width="1.6"/>' +
+      '<circle cx="52" cy="62" r="1.6" fill="#c9b287" opacity=".6"/><circle cx="27" cy="66" r="1.2" fill="#c9b287" opacity=".6"/><circle cx="48" cy="30" r="1" fill="#c9b287" opacity=".6"/>' +
+      '<ellipse cx="29" cy="32" rx="6" ry="10" fill="#fff" opacity=".75"/>' +
+      '<path class="egg-crack" d="M13 50 L23 44 L29 54 L39 44 L47 55 L55 45 L67 51" stroke="#7a5f33" stroke-width="2" fill="none" stroke-linejoin="round"/>' +
+      '</svg>';
+  }
+  ui.bigEgg = bigEgg;
+
   function snakeCard(state, s) {
+    if (sim.isUnrevealed(state, s)) {
+      var proj = sim.projectOfBaby(state, s);
+      return '<article class="snake-card is-egg">' +
+        '<button type="button" class="snake-card-btn" data-action="hatch-results" data-id="' + proj.id + '" aria-label="Crack open the egg for ' + esc(s.name) + '">' +
+          '<div class="portrait egg-portrait">' + bigEgg(s.id + 'c') + '</div>' +
+          '<div class="snake-card-body"><h3>' + esc(s.name) + '</h3><p class="snake-meta">Hatchling · ' + esc(proj.maleName) + ' × ' + esc(proj.femaleName) + '</p>' +
+          '<div class="tags"><span class="tag tag-poss">Morph unknown</span></div><div class="chips">' + chip('info', 'Tap to crack it open') + '</div></div>' +
+        '</button></article>';
+    }
     return '<article class="snake-card">' +
       '<button type="button" class="snake-card-btn" data-action="open-snake" data-id="' + s.id + '" aria-label="Open details for ' + esc(s.name) + '">' +
         '<div class="portrait">' + SB.art.snakeSVG(s, { label: 'Placeholder illustration of ' + s.name + ', ' + G.morphLabel(s.genotype) }) + '</div>' +
@@ -363,7 +390,7 @@
   /* ---------- Breeding ---------- */
 
   function pickList(state, sex, selected) {
-    var list = state.snakes.filter(function (s) { return s.sex === sex; }).sort(function (a, b) {
+    var list = state.snakes.filter(function (s) { return s.sex === sex && !sim.isUnrevealed(state, s); }).sort(function (a, b) {
       var ea = sim.eligibility(state, a).ok ? 0 : 1, eb = sim.eligibility(state, b).ok ? 0 : 1;
       return ea - eb || a.name.localeCompare(b.name);
     });
@@ -480,30 +507,138 @@
       }).join('') + '</ul>' : empty('No hatches yet', 'Your first clutch results will appear here.')) + '</section></div>';
   };
 
-  ui.hatchResults = function (state, p) {
+  function confetti(tier) {
+    var colors = tier === 'jackpot' ? ['#d9a441', '#f3d36b', '#b35d38', '#4f6b3a', '#fff4d6'] : ['#d9a441', '#4f6b3a', '#f3d36b'];
+    var n = tier === 'jackpot' ? 18 : 10, out = '';
+    for (var i = 0; i < n; i++) {
+      out += '<span style="--x:' + Math.round(-60 + (i * 137) % 120) + 'px;--r:' + ((i * 67) % 360) + 'deg;--d:' + (0.9 + (i % 5) * 0.12).toFixed(2) + 's;background:' + colors[i % colors.length] + '"></span>';
+    }
+    return '<div class="confetti" aria-hidden="true">' + out + '</div>';
+  }
+
+  function revealCard(state, p, b, fresh) {
+    var label = G.morphLabel(b.genotype);
+    var r = sim.rarity(p, label);
+    var disc = state.discoveries.find(function (d) { return d.label === label; });
+    var isNew = !!(disc && disc.snakeId === b.id);
+    var inBook = isNew && sim.bookSlotFor(label);
+    var badges = '';
+    if (r.tier !== 'common') badges += '<span class="badge badge-' + r.tier + '"><span aria-hidden="true">' + (r.tier === 'jackpot' ? '✦' : '★') + '</span> ' + esc(r.text) + '</span>';
+    if (isNew) badges += '<span class="badge badge-new"><span aria-hidden="true">✚</span> New morph!</span>';
+    if (inBook) badges += '<span class="badge badge-book"><span aria-hidden="true">📘</span> Book sticker</span>';
+    var celebrate = fresh && (r.tier !== 'common' || isNew);
+    return '<li class="reveal-card tier-' + r.tier + (fresh ? ' is-fresh' : '') + (isNew ? ' is-new' : '') + '">' +
+      (celebrate ? confetti(isNew && r.tier === 'common' ? 'rare' : r.tier) : '') +
+      '<div class="reveal-art">' + (r.tier === 'jackpot' || isNew ? '<span class="rays" aria-hidden="true"></span>' : '') + SB.art.snakeSVG(b, { suffix: 'h', label: 'Illustration of ' + b.name + ', ' + label }) + '</div>' +
+      '<div class="reveal-body"><p class="reveal-morph">' + esc(label) + '</p>' +
+        '<p class="small"><strong>' + esc(b.name) + '</strong> · ' + sexLabel(b) + '</p>' +
+        (badges ? '<div class="badges">' + badges + '</div>' : '') +
+        (G.carrierNotes(b).length ? '<p class="small muted">' + esc(G.carrierNotes(b).map(function (n) { return n.text; }).join(' · ')) + '</p>' : '') +
+        '<div class="btn-row">' + btn(b.keeper ? '★ Keeping' : '☆ Keep', 'keeper', 'data-id="' + b.id + '" aria-pressed="' + b.keeper + '"', 'btn-small') + btn('Details', 'open-snake', 'data-id="' + b.id + '"', 'btn-small btn-ghost') + '</div>' +
+      '</div></li>';
+  }
+
+  /* Hatch results double as the egg-cracking reveal while any egg is still closed. */
+  ui.hatchResults = function (state, p, fresh) {
+    fresh = fresh || {};
+    var closed = sim.unrevealedCount(state, p);
     var babies = p.babies.map(function (id) { return sim.snake(state, id); });
     var present = babies.filter(Boolean);
+    var n = p.babies.length;
+    var intro = closed
+      ? '<div class="reveal-intro"><p><strong>' + closed + ' of ' + n + ' egg' + (n === 1 ? '' : 's') + '</strong> from ' + esc(p.maleName) + ' × ' + esc(p.femaleName) + ' ' + (closed === 1 ? 'is' : 'are') + ' still closed. Tap an egg to crack it open.</p>' +
+        btn('Crack all ' + closed, 'reveal-all', 'data-id="' + p.id + '"', 'btn-small') + '</div>'
+      : '<p>' + n + ' hatchling' + (n === 1 ? '' : 's') + ' from <strong>' + esc(p.maleName) + ' × ' + esc(p.femaleName) + '</strong> (week ' + p.hatchWeek + ').</p>';
+    var grid = '<ul class="reveal-grid">' + present.map(function (b, i) {
+      var open = !p.revealed || p.revealed.indexOf(b.id) >= 0;
+      if (open) return revealCard(state, p, b, fresh[b.id]);
+      return '<li><button type="button" class="reveal-egg" data-action="reveal" data-project="' + p.id + '" data-id="' + b.id + '" aria-label="Crack egg ' + (i + 1) + '">' +
+        bigEgg(b.id + 'r') + '<span class="reveal-egg-label">Egg ' + (i + 1) + '</span></button></li>';
+    }).join('') + '</ul>';
+    if (closed) return intro + grid;
+
     var counts = {};
     babies.forEach(function (b, i) {
       // Babies that have since left the collection still count toward the original results.
       var label = b ? G.morphLabel(b.genotype) : (p.hatchLabels && p.hatchLabels[i]) || 'Rehomed';
       counts[label] = (counts[label] || 0) + 1;
     });
-    var n = p.babies.length;
     var labels = {};
     p.predicted.forEach(function (o) { labels[o.label] = true; });
     Object.keys(counts).forEach(function (l) { labels[l] = true; });
-    return '<p>' + n + ' hatchling' + (n === 1 ? '' : 's') + ' from <strong>' + esc(p.maleName) + ' × ' + esc(p.femaleName) + '</strong> (week ' + p.hatchWeek + '). Compare the predicted odds with what actually hatched:</p>' +
+    return intro + grid +
+      '<h3>Predicted vs. hatched</h3>' +
       '<table class="outcomes compare"><thead><tr><th scope="col">Morph</th><th scope="col">Predicted</th><th scope="col">Hatched</th></tr></thead><tbody>' +
       Object.keys(labels).map(function (l) {
         var pr = p.predicted.find(function (o) { return o.label === l; });
         return '<tr><th scope="row">' + esc(l) + '</th><td>' + (pr ? G.pct(pr.prob) + ' <span class="muted small">(≈' + U.round(pr.prob * n, 1) + ')</span>' : '—') + '</td><td><strong>' + (counts[l] || 0) + '</strong></td></tr>';
       }).join('') + '</tbody></table>' +
-      '<p class="small muted">Differences between predicted and actual are normal: each egg is an independent roll.</p>' +
-      (present.length ? '<h3>Meet the babies</h3><ul class="baby-list">' + present.map(function (b) {
-        return '<li class="baby"><span class="pick-art">' + SB.art.snakeSVG(b, { suffix: 'h', label: '' }) + '</span><div><strong>' + esc(b.name) + '</strong> · ' + sexLabel(b) + '<div class="small">' + esc(G.fullLabel(b)) + '</div>' +
-          '<div class="btn-row">' + btn(b.keeper ? '★ Keeping' : '☆ Keep', 'keeper', 'data-id="' + b.id + '" aria-pressed="' + b.keeper + '"', 'btn-small') + btn('Details', 'open-snake', 'data-id="' + b.id + '"', 'btn-small btn-ghost') + '</div></div></li>';
-      }).join('') + '</ul><p class="small">Hatchlings need to eat on their own (feed them after a week) before they can go to new homes on the Market.</p>' : '');
+      '<p class="small muted">Differences between predicted and actual are normal: each egg is an independent roll. Hatchlings need to eat on their own (feed them after a week) before they can go to new homes.</p>';
+  };
+
+  /* ---------- Morph Book ---------- */
+
+  ui.clue = function (genotype) {
+    var parts = [];
+    SB.GENES.forEach(function (g) {
+      var c = genotype[g.id] || 0;
+      if (!c) return;
+      if (g.type === 'codominant') parts.push(c === 2 ? 'two copies of ' + g.name + ' (one from each parent)' : 'one copy of ' + g.name);
+      else if (g.type === 'dominant') parts.push(g.name + ' from either parent');
+      else parts.push('two copies of ' + g.name + ' (both parents must carry it)');
+    });
+    return parts.length ? 'Needs ' + parts.join(' + ') + '.' : 'A hatchling with no visual morph genes.';
+  };
+
+  function sticker(state, page, slot, idx) {
+    var d = sim.slotDiscovery(state, slot);
+    if (d) {
+      var snake = { id: d.snakeId || ('book-' + slot.name), name: slot.name, genotype: d.genotype || slot.genotype, ageWeeks: 120, temperament: 'Calm' };
+      return '<li class="sticker is-filled"><div class="sticker-art">' + SB.art.snakeSVG(snake, { suffix: 'b', label: 'Sticker: ' + slot.name }) + '</div>' +
+        '<p class="sticker-name">' + esc(slot.name) + '</p><p class="sticker-meta">' + chip('good', 'Hatched wk ' + d.week) + '<span class="block">First: ' + esc(d.by) + '</span></p></li>';
+    }
+    var ghost = { id: 'ghost-' + page.id + idx, name: slot.name, genotype: slot.genotype, ageWeeks: 120, temperament: 'Calm' };
+    return '<li class="sticker is-empty"><button type="button" class="sticker-btn" data-action="book-slot" data-page="' + page.id + '" data-slot="' + idx + '" aria-label="' + esc(slot.name) + ': not hatched yet. Find pairings">' +
+      '<div class="sticker-art silhouette">' + SB.art.snakeSVG(ghost, { suffix: 'g', label: '' }) + '<span class="sticker-q" aria-hidden="true">?</span></div>' +
+      '<p class="sticker-name">' + esc(slot.name) + '</p><p class="sticker-clue">' + esc(ui.clue(slot.genotype)) + '</p>' +
+      '<span class="sticker-cta">Find pairings ›</span></button></li>';
+  }
+
+  ui.book = function (state) {
+    var total = 0, got = 0;
+    SB.BOOK.forEach(function (pg) { var pr = sim.pageProgress(state, pg); total += pr.total; got += pr.got; });
+    var claimed = state.bookDone || [];
+    return '<div class="stack">' +
+      '<section class="card book-cover" aria-labelledby="book-h"><div class="book-cover-text"><p class="eyebrow">Keeper’s collection</p><h2 id="book-h">Morph Book</h2>' +
+        '<p>Every morph you hatch for the first time earns a sticker. Fill a page to claim its reward. Tap an empty slot to see which of your snakes could produce it.</p></div>' +
+        '<div class="book-count"><span class="book-count-num">' + got + '<span class="muted"> / ' + total + '</span></span><span class="small muted">stickers collected</span>' +
+        '<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="' + total + '" aria-valuenow="' + got + '" aria-label="Morph Book progress"><div style="width:' + (got / total * 100) + '%"></div></div></div></section>' +
+      SB.BOOK.map(function (page) {
+        var pr = sim.pageProgress(state, page);
+        var done = claimed.indexOf(page.id) >= 0;
+        return '<section class="card book-page' + (done ? ' is-complete' : '') + '" aria-labelledby="bp-' + page.id + '">' +
+          '<div class="book-page-head"><div><h2 id="bp-' + page.id + '">' + esc(page.title) + '</h2><p class="small muted">' + esc(page.desc) + '</p></div>' +
+          '<div class="book-page-status"><strong>' + pr.got + ' / ' + pr.total + '</strong>' +
+            (done ? chip('good', 'Page complete · reward claimed') : chip('info', 'Reward: ' + U.money(page.reward.money) + ' + ' + page.reward.rep + ' rep')) + '</div></div>' +
+          '<ul class="sticker-grid">' + page.slots.map(function (slot, i) { return sticker(state, page, slot, i); }).join('') + '</ul></section>';
+      }).join('') + '</div>';
+  };
+
+  ui.bookSlot = function (state, page, slot) {
+    var pairs = sim.pairsFor(state, slot.genotype);
+    var needed = SB.GENES.filter(function (g) { return slot.genotype[g.id]; }).map(function (g) { return g.name; });
+    var ghost = { id: 'ghost-dlg-' + slot.name, name: slot.name, genotype: slot.genotype, ageWeeks: 120, temperament: 'Calm' };
+    return '<div class="slot-detail"><div class="sticker-art silhouette slot-art">' + SB.art.snakeSVG(ghost, { suffix: 's', label: '' }) + '<span class="sticker-q" aria-hidden="true">?</span></div>' +
+      '<div><p><strong>' + esc(ui.clue(slot.genotype)) + '</strong></p><p class="small muted">Page: ' + esc(page.title) + '. Hatch one to fill this slot.</p>' +
+      '<h3>Best pairings in your collection</h3>' +
+      (pairs.length ? '<ul class="pair-list">' + pairs.map(function (pr) {
+        return '<li class="pair-row"><div><strong>' + esc(pr.male.name) + ' × ' + esc(pr.female.name) + '</strong><div class="small muted">' + esc(G.fullLabel(pr.male)) + ' × ' + esc(G.fullLabel(pr.female)) + '</div></div>' +
+          '<div class="pair-odds"><span class="pair-pct">' + G.pct(pr.prob) + '</span><span class="small muted">per egg</span></div>' +
+          '<div class="pair-actions">' + (pr.ready ? chip('good', 'Ready') : chip('warn', 'Not ready yet')) + btn('Preview', 'preview-pair', 'data-m="' + pr.male.id + '" data-f="' + pr.female.id + '"', 'btn-small') + '</div></li>';
+      }).join('') + '</ul>'
+        : '<div class="note note-warn"><span aria-hidden="true">!</span> None of your snakes can produce a ' + esc(slot.name) + ' yet. Look for a male and a female carrying <strong>' + esc(needed.join(' and ') || 'no visual genes') + '</strong> on the Market, or breed carriers first.</div>' +
+          btn('Go to Market', 'view', 'data-view="market"', 'btn-small')) +
+      '</div></div>';
   };
 
   /* ---------- Market ---------- */
@@ -511,7 +646,7 @@
   ui.market = function (state) {
     var mk = state.market;
     var requests = mk.requests.map(function (r) {
-      var matches = state.snakes.filter(function (s) { return sim.matchesCriteria(state, s, r.criteria); });
+      var matches = state.snakes.filter(function (s) { return !sim.isUnrevealed(state, s) && sim.matchesCriteria(state, s, r.criteria); });
       var sellable = matches.filter(function (s) { return sim.canSell(state, s).ok; });
       return '<li class="request"><div class="request-head"><strong>' + esc(r.buyer) + '</strong>' + chip('info', 'Pays +' + Math.round((r.bonus - 1) * 100) + '%') + '</div>' +
         '<p>' + esc(r.text) + '</p><p class="small muted">Open until week ' + r.expires + '</p>' +
@@ -521,7 +656,7 @@
           : '<p class="small">' + chip('warn', matches.length ? 'Your matching snakes aren’t ready to sell yet' : 'No matching snakes yet') + '</p>') + '</li>';
     }).join('');
 
-    var sellRows = state.snakes.slice().sort(function (a, b) { return (a.keeper ? 1 : 0) - (b.keeper ? 1 : 0) || a.name.localeCompare(b.name); }).map(function (s) {
+    var sellRows = state.snakes.filter(function (s) { return !sim.isUnrevealed(state, s); }).sort(function (a, b) { return (a.keeper ? 1 : 0) - (b.keeper ? 1 : 0) || a.name.localeCompare(b.name); }).map(function (s) {
       var c = sim.canSell(state, s);
       return '<tr><th scope="row"><button type="button" class="link" data-action="open-snake" data-id="' + s.id + '">' + esc(s.name) + '</button>' + (s.keeper ? ' <span class="keeper">★<span class="sr-only"> keeper</span></span>' : '') + '<div class="small muted">' + (s.sex === 'M' ? '♂' : '♀') + ' ' + U.age(s.ageWeeks) + ' · ' + esc(G.fullLabel(s)) + '</div></th>' +
         '<td>' + U.money(sim.value(state, s)) + '</td><td>' + (c.ok ? btn('Sell…', 'sell', 'data-id="' + s.id + '"', 'btn-small') : '<span class="small">' + chip('warn', 'Not yet') + '<span class="block muted">' + esc(c.reasons[0]) + '</span></span>') + '</td></tr>';

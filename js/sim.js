@@ -83,6 +83,7 @@
   sim.canSell = function (state, snake) {
     var reasons = [];
     if (snake.health < 60) reasons.push('health must be at least 60 — reputable buyers expect a healthy animal');
+    if (sim.isUnrevealed(state, snake)) reasons.push('still inside its egg — reveal it first');
     if (snake.mealsEaten < 1) reasons.push('hatchlings must be feeding on their own before going to a new home');
     if (sim.projectFor(state, snake)) reasons.push('is part of an active breeding project');
     if (snake.recoveryUntil > state.week) reasons.push('is recovering after laying eggs');
@@ -267,10 +268,19 @@
     var em = sim.eligibility(state, m), ef = sim.eligibility(state, f);
     if (!em.ok) reasons.push(m.name + ': ' + em.reasons.join(', ') + '.');
     if (!ef.ok) reasons.push(f.name + ': ' + ef.reasons.join(', ') + '.');
+    if (sim.related(m, f)) reasons.push(m.name + ' and ' + f.name + ' are closely related. Pairing parents with offspring or siblings together raises health risks, so choose an unrelated partner.');
     if (!sim.freeIncubators(state).length) reasons.push('Every incubator is reserved by an active project. Buy another incubator or wait for a hatch.');
     var spare = sim.freeEnclosures(state).length - sim.promisedSpaces(state);
     if (spare < T.minFreeSpacesToPair) reasons.push('Not enough room for hatchlings: you need at least ' + T.minFreeSpacesToPair + ' free enclosures not already promised to other clutches (you have ' + Math.max(0, spare) + '). Buy tubs on the Facility tab.');
     return { ok: reasons.length === 0, reasons: reasons };
+  };
+
+  /* Close relatives: parent and offspring, or siblings/half-siblings. */
+  sim.related = function (a, b) {
+    var pa = a.parents, pb = b.parents;
+    if (pa && (pa.sireId === b.id || pa.damId === b.id)) return true;
+    if (pb && (pb.sireId === a.id || pb.damId === a.id)) return true;
+    return !!(pa && pb && (pa.sireId === pb.sireId || pa.damId === pb.damId));
   };
 
   sim.successChance = function (m, f) {
@@ -372,24 +382,142 @@
       baby.history.push({ week: state.week, text: 'Hatched from the ' + p.maleName + ' × ' + p.femaleName + ' clutch.' });
       state.snakes.push(baby);
       babies.push(baby);
-      var label = G.morphLabel(baby.genotype);
-      if (!state.discoveries.some(function (d) { return d.label === label; })) {
-        state.discoveries.push({ label: label, week: state.week, genes: G.visualGenes(baby.genotype), by: baby.name });
-        sim.log(state, 'New discovery: your first ' + label + ' hatched (' + baby.name + ')!', 'good');
-      }
     });
     p.stage = 'done';
     p.babies = babies.map(function (b) { return b.id; });
     p.hatchLabels = babies.map(function (b) { return G.morphLabel(b.genotype); });
     p.hatchWeek = state.week;
+    // Morphs stay a surprise until the keeper cracks each egg open (see sim.reveal).
+    p.revealed = [];
     state.stats.hatched += babies.length;
     if (babies.length) state.reputation += 1;
     state.lastHatch = { projectId: p.id, week: state.week, seen: false };
     var homeless = babies.filter(function (b) { return !b.enclosureId; }).length;
-    sim.log(state, babies.length + ' hatchling' + (babies.length === 1 ? '' : 's') + ' emerged from the ' + p.maleName + ' × ' + p.femaleName + ' clutch: ' +
-      babies.map(function (b) { return b.name + ' (' + G.morphLabel(b.genotype) + ')'; }).join(', ') + '.', 'good');
+    sim.log(state, babies.length + ' egg' + (babies.length === 1 ? ' is' : 's are') + ' pipping in the ' + p.maleName + ' × ' + p.femaleName + ' clutch. Crack them open to meet your hatchlings!', 'good');
     if (homeless) sim.log(state, homeless + ' hatchling' + (homeless === 1 ? ' is' : 's are') + ' in temporary holding tubs. Buy tubs or find them homes soon — cramped holding adds stress.', 'warn');
   }
+
+  /* ---------- Hatch reveal ---------- */
+
+  sim.projectOfBaby = function (state, snake) {
+    if (snake.origin !== 'Hatched') return null;
+    return state.projects.find(function (p) { return p.babies && p.babies.indexOf(snake.id) >= 0; }) || null;
+  };
+
+  /* Old saves have no `revealed` list; their babies count as revealed. */
+  sim.isUnrevealed = function (state, snake) {
+    var p = sim.projectOfBaby(state, snake);
+    return !!(p && p.revealed && p.revealed.indexOf(snake.id) < 0);
+  };
+
+  sim.unrevealedCount = function (state, p) {
+    if (!p.revealed) return 0;
+    return p.babies.filter(function (id) { return p.revealed.indexOf(id) < 0 && sim.snake(state, id); }).length;
+  };
+
+  sim.pendingReveals = function (state) {
+    return state.projects.filter(function (p) { return p.stage === 'done' && sim.unrevealedCount(state, p) > 0; });
+  };
+
+  /* How surprising a hatch was, from the per-egg odds predicted for its clutch. */
+  sim.rarity = function (p, label) {
+    var o = (p.predicted || []).find(function (x) { return x.label === label; });
+    var prob = o ? o.prob : 0;
+    if (!prob) return { tier: 'jackpot', prob: 0, text: 'Unexpected!' };
+    if (prob <= 0.07) return { tier: 'jackpot', prob: prob, text: 'Jackpot! 1 in ' + Math.round(1 / prob) };
+    if (prob <= 0.2) return { tier: 'rare', prob: prob, text: 'Rare hatch · 1 in ' + Math.round(1 / prob) };
+    return { tier: 'common', prob: prob, text: '' };
+  };
+
+  sim.bookSlotFor = function (label) {
+    for (var i = 0; i < SB.BOOK.length; i++) {
+      var slot = SB.BOOK[i].slots.find(function (sl) { return G.morphLabel(sl.genotype) === label; });
+      if (slot) return { page: SB.BOOK[i], slot: slot };
+    }
+    return null;
+  };
+
+  function recordDiscovery(state, baby) {
+    var label = G.morphLabel(baby.genotype);
+    if (state.discoveries.some(function (d) { return d.label === label; })) return null;
+    var d = { label: label, week: state.week, genes: G.visualGenes(baby.genotype), by: baby.name, snakeId: baby.id, genotype: Object.assign({}, baby.genotype) };
+    state.discoveries.push(d);
+    var inBook = sim.bookSlotFor(label);
+    sim.log(state, 'New discovery: your first ' + label + ' (' + baby.name + ')!' + (inBook ? ' A new sticker for your Morph Book.' : ''), 'good');
+    return d;
+  }
+
+  /* Crack one egg. Returns { ok, msg, baby, isNew } */
+  sim.reveal = function (state, projectId, snakeId) {
+    var p = state.projects.find(function (x) { return x.id === projectId; });
+    if (!p || !p.revealed) return fail('That clutch has already been revealed.');
+    if (p.babies.indexOf(snakeId) < 0) return fail('That hatchling isn’t from this clutch.');
+    if (p.revealed.indexOf(snakeId) >= 0) return fail('Already revealed.');
+    var baby = sim.snake(state, snakeId);
+    p.revealed.push(snakeId);
+    if (!baby) return ok('Revealed.');
+    var d = recordDiscovery(state, baby);
+    var label = G.morphLabel(baby.genotype);
+    var r = sim.rarity(p, label);
+    if (r.tier !== 'common') sim.log(state, baby.name + ' hatched as a ' + label + ' — ' + r.text.toLowerCase() + '!', 'good');
+    history(state, baby, 'Revealed as a ' + label + '.');
+    var res = ok(baby.name + ' is a ' + (baby.sex === 'M' ? 'male ' : 'female ') + label + '!' + (d ? ' New morph discovered!' : ''));
+    res.baby = baby; res.isNew = !!d; res.rarity = r;
+    return res;
+  };
+
+  sim.revealAll = function (state, projectId) {
+    var p = state.projects.find(function (x) { return x.id === projectId; });
+    if (!p || !p.revealed) return fail('Nothing left to reveal.');
+    var ids = p.babies.filter(function (id) { return p.revealed.indexOf(id) < 0; });
+    if (!ids.length) return fail('Every egg in this clutch is already open.');
+    var fresh = 0;
+    ids.forEach(function (id) { var r = sim.reveal(state, projectId, id); if (r.isNew) fresh++; });
+    return ok('Cracked ' + ids.length + ' egg' + (ids.length === 1 ? '' : 's') + '!' + (fresh ? ' ' + fresh + ' new morph' + (fresh === 1 ? '' : 's') + ' discovered!' : ''));
+  };
+
+  /* ---------- Morph Book ---------- */
+
+  sim.slotDiscovery = function (state, slot) {
+    var label = G.morphLabel(slot.genotype);
+    return state.discoveries.find(function (d) { return d.label === label; }) || null;
+  };
+
+  sim.pageProgress = function (state, page) {
+    var got = page.slots.filter(function (sl) { return sim.slotDiscovery(state, sl); }).length;
+    return { got: got, total: page.slots.length, done: got === page.slots.length };
+  };
+
+  sim.checkBook = function (state) {
+    state.bookDone = state.bookDone || [];
+    var msgs = [];
+    SB.BOOK.forEach(function (page) {
+      if (state.bookDone.indexOf(page.id) >= 0 || !sim.pageProgress(state, page).done) return;
+      state.bookDone.push(page.id);
+      state.money += page.reward.money;
+      state.reputation += page.reward.rep;
+      var msg = 'Morph Book page complete: ' + page.title + '! Reward: ' + U.money(page.reward.money) + ' and +' + page.reward.rep + ' reputation.';
+      sim.log(state, msg, 'good');
+      msgs.push(msg);
+    });
+    return msgs;
+  };
+
+  /* Best pairings in the collection for producing a morph, by per-egg chance. */
+  sim.pairsFor = function (state, genotype) {
+    var label = G.morphLabel(genotype);
+    var pool = state.snakes.filter(function (s) { return !sim.isUnrevealed(state, s); });
+    var males = pool.filter(function (s) { return s.sex === 'M'; }), females = pool.filter(function (s) { return s.sex === 'F'; });
+    var out = [];
+    males.forEach(function (m) {
+      females.forEach(function (f) {
+        if (sim.related(m, f)) return;
+        var o = G.predict(m, f).outcomes.find(function (x) { return x.label === label; });
+        if (o) out.push({ male: m, female: f, prob: o.prob, ready: sim.eligibility(state, m).ok && sim.eligibility(state, f).ok });
+      });
+    });
+    return out.sort(function (a, b) { return (b.ready - a.ready) || (b.prob - a.prob); }).slice(0, 4);
+  };
 
   /* ---------- Market ---------- */
 
@@ -598,7 +726,7 @@
       messages.push(msg);
       goal = sim.currentGoal(state);
     }
-    return messages;
+    return messages.concat(sim.checkBook(state));
   };
 
   /* ---------- Weekly turn ---------- */

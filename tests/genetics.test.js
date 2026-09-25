@@ -98,9 +98,72 @@ test('a full game loop runs: pair, lay, incubate, hatch, sell', () => {
   assert.strictEqual(proj.stage, 'done');
   assert.ok(proj.babies.length > 0);
   const baby = SB.sim.snake(state, proj.babies[0]);
+  assert.ok(SB.sim.isUnrevealed(state, baby), 'hatchlings start inside their eggs');
+  assert.match(SB.sim.canSell(state, baby).reasons.join(), /reveal/);
+  assert.ok(SB.sim.revealAll(state, proj.id).ok);
+  assert.strictEqual(SB.sim.isUnrevealed(state, baby), false);
   assert.strictEqual(SB.sim.canSell(state, baby).ok, false, 'unfed hatchling cannot be sold');
   SB.sim.advanceWeek(state);
   assert.ok(SB.sim.feed(state, baby.id).ok);
   r = SB.sim.sell(state, baby.id);
   assert.ok(r.ok, r.msg);
+});
+
+function freshState() {
+  global.localStorage = { getItem() { return null; }, setItem() {}, removeItem() {} };
+  return SB.state.newGame();
+}
+
+function fakeClutch(state, genotypes, predicted) {
+  const babies = genotypes.map((g) => { const b = SB.state.makeSnake(state, { genotype: g, origin: 'Hatched', ageWeeks: 0, mealsEaten: 0 }); state.snakes.push(b); return b; });
+  const p = { id: 'pz', maleName: 'A', femaleName: 'B', stage: 'done', hatchWeek: 1, babies: babies.map((b) => b.id), revealed: [], predicted: predicted || [] };
+  state.projects.push(p);
+  return { p, babies };
+}
+
+test('discoveries are recorded only when an egg is revealed', () => {
+  const state = freshState();
+  const { p, babies } = fakeClutch(state, [{ clown: 2 }, { clown: 2 }], [{ label: 'Clown', prob: 0.0625 }]);
+  assert.strictEqual(state.discoveries.length, 0);
+  const r = SB.sim.reveal(state, p.id, babies[0].id);
+  assert.ok(r.ok && r.isNew);
+  assert.strictEqual(r.rarity.tier, 'jackpot');
+  assert.strictEqual(state.discoveries[0].label, 'Clown');
+  assert.strictEqual(SB.sim.reveal(state, p.id, babies[1].id).isNew, false, 'second Clown is not new');
+  assert.strictEqual(SB.sim.reveal(state, p.id, babies[1].id).ok, false, 'cannot reveal twice');
+  assert.strictEqual(SB.sim.pendingReveals(state).length, 0);
+});
+
+test('completing a Morph Book page pays its reward once', () => {
+  const state = freshState();
+  const page = SB.BOOK.find((pg) => pg.id === 'supers');
+  const { p } = fakeClutch(state, page.slots.map((sl) => sl.genotype));
+  SB.sim.revealAll(state, p.id);
+  const money = state.money;
+  const msgs = SB.sim.checkBook(state);
+  assert.strictEqual(msgs.length, 1);
+  assert.strictEqual(state.money, money + page.reward.money);
+  assert.strictEqual(SB.sim.checkBook(state).length, 0, 'reward is not paid twice');
+});
+
+test('pair finder ranks collection pairs that can produce a morph', () => {
+  const state = freshState();
+  const pairs = SB.sim.pairsFor(state, { pastel: 1, clown: 2 });
+  assert.ok(pairs.length > 0);
+  assert.strictEqual(pairs[0].male.name, 'Biscuit');
+  assert.strictEqual(pairs[0].female.name, 'Marigold');
+  near(pairs[0].prob, 0.125);
+  assert.strictEqual(SB.sim.pairsFor(state, { mojave: 2 }).length, 0);
+});
+
+test('close relatives cannot be paired and are skipped by the pair finder', () => {
+  const state = freshState();
+  const mk = (sex, parents) => { const s = SB.state.makeSnake(state, { sex, genotype: { clown: 2 }, ageWeeks: 200, weight: 2000, parents }); state.snakes.push(s); return s; };
+  const par = { sireId: 'x1', damId: 'x2', sireName: 'X', damName: 'Y' };
+  const bro = mk('M', par), sis = mk('F', par);
+  assert.ok(SB.sim.related(bro, sis));
+  assert.match(SB.sim.pairCheck(state, bro.id, sis.id).reasons.join(' '), /closely related/);
+  assert.ok(!SB.sim.pairsFor(state, { clown: 2 }).some((p) => p.male === bro && p.female === sis));
+  const biscuit = state.snakes.find((s) => s.name === 'Biscuit');
+  assert.strictEqual(SB.sim.related(biscuit, sis), false);
 });

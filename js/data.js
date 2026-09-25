@@ -147,6 +147,42 @@
     { id: 'market', text: 'Keep the hatchlings you love and find good homes for the rest on the Market.' }
   ];
 
+  /*
+   * Morph Book: sticker pages filled by hatching each morph for the first time.
+   * A slot matches when a hatchling's visual morph equals the slot genotype's.
+   */
+  SB.BOOK = [
+    { id: 'classics', title: 'The Classics', reward: { money: 250, rep: 3 },
+      desc: 'One gene each. Every keeper’s first page.',
+      slots: [
+        { name: 'Normal', genotype: {} },
+        { name: 'Pastel', genotype: { pastel: 1 } },
+        { name: 'Yellow Belly', genotype: { yellowbelly: 1 } },
+        { name: 'Mojave', genotype: { mojave: 1 } },
+        { name: 'Pinstripe', genotype: { pinstripe: 1 } },
+        { name: 'Clown', genotype: { clown: 2 } },
+        { name: 'Albino', genotype: { albino: 2 } },
+        { name: 'Piebald', genotype: { piebald: 2 } }
+      ] },
+    { id: 'supers', title: 'Super Forms', reward: { money: 400, rep: 4 },
+      desc: 'Two copies of an incomplete-dominant gene, one from each parent.',
+      slots: [
+        { name: 'Super Pastel', genotype: { pastel: 2 } },
+        { name: 'Ivory', genotype: { yellowbelly: 2 } },
+        { name: 'Blue-Eyed Leucistic', genotype: { mojave: 2 } }
+      ] },
+    { id: 'designer', title: 'Designer Combos', reward: { money: 600, rep: 6 },
+      desc: 'Two or more visual genes stacked in one snake.',
+      slots: [
+        { name: 'Pastel Clown', genotype: { pastel: 1, clown: 2 } },
+        { name: 'Pastel Pinstripe', genotype: { pastel: 1, pinstripe: 1 } },
+        { name: 'Albino Pinstripe', genotype: { pinstripe: 1, albino: 2 } },
+        { name: 'Mojave Clown', genotype: { mojave: 1, clown: 2 } },
+        { name: 'Albino Piebald', genotype: { albino: 2, piebald: 2 } },
+        { name: 'Super Pastel Clown', genotype: { pastel: 2, clown: 2 } }
+      ] }
+  ];
+
   SB.EXAMPLE_PAIRINGS = [
     { title: 'Codominant × Normal', male: { pastel: 1 }, female: {},
       note: 'Each baby has a 50% chance to inherit the single Pastel copy.' },

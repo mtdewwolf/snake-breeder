@@ -13,11 +13,16 @@
     calc: { male: { pastel: 1, clown: 1 }, female: { clown: 1 } }
   };
   var dialogState = null;
+  var freshReveals = {}; // babies revealed in the latest click, for one celebratory render
   var pendingConfirm = null;
   var lastFocus = null;
 
   var $ = function (id) { return document.getElementById(id); };
   var dialog = $('dialog');
+
+  function reducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
 
   /* ---------- Feedback ---------- */
 
@@ -78,8 +83,16 @@
     } else if (dialogState.type === 'hatch') {
       var p = state.projects.find(function (x) { return x.id === dialogState.id; });
       if (!p) { closeDialog(); return; }
-      title.textContent = '🐣 Hatch results';
-      body.innerHTML = ui.hatchResults(state, p);
+      var closed = sim.unrevealedCount(state, p);
+      title.textContent = closed ? '🥚 Crack the eggs!' : '🐣 Hatch results';
+      body.innerHTML = ui.hatchResults(state, p, freshReveals);
+      freshReveals = {};
+    } else if (dialogState.type === 'book-slot') {
+      var page = SB.BOOK.find(function (x) { return x.id === dialogState.page; });
+      var slot = page && page.slots[dialogState.slot];
+      if (!slot) { closeDialog(); return; }
+      title.textContent = '📘 ' + slot.name;
+      body.innerHTML = ui.bookSlot(state, page, slot);
     } else if (dialogState.type === 'confirm') {
       title.textContent = dialogState.title;
       body.innerHTML = '<p>' + dialogState.html + '</p><div class="btn-row end">' +
@@ -117,6 +130,7 @@
   /* ---------- Actions ---------- */
 
   function switchView(v) {
+    if (dialog.open) closeDialog();
     uis.view = v;
     persist();
     render();
@@ -186,6 +200,41 @@
       confirmAction({ title: 'Separate this pair?', html: 'The pairing will end without eggs and the incubator becomes free.', yes: 'Separate' }, function () { act(function () { return sim.cancelPairing(state, el.dataset.id); }); });
     },
     'hatch-results': function (el) { openDialog({ type: 'hatch', id: el.dataset.id }); },
+    'reveal': function (el) {
+      if (el.classList.contains('is-cracking')) return;
+      var pid = el.dataset.project, id = el.dataset.id;
+      var go = function () {
+        var r = sim.reveal(state, pid, id);
+        if (r.ok) freshReveals[id] = true;
+        act(function () { return r; });
+        var next = dialog.querySelector('.reveal-egg');
+        if (next) next.focus({ preventScroll: true });
+        else { var card = dialog.querySelector('.reveal-card.is-fresh .btn'); if (card) card.focus({ preventScroll: true }); }
+      };
+      if (reducedMotion()) return go();
+      el.classList.add('is-cracking');
+      setTimeout(go, 650);
+    },
+    'reveal-all': function (el) {
+      var p = state.projects.find(function (x) { return x.id === el.dataset.id; });
+      if (!p) return;
+      var ids = p.babies.filter(function (id) { return p.revealed && p.revealed.indexOf(id) < 0; });
+      var go = function () {
+        ids.forEach(function (id) { freshReveals[id] = true; });
+        act(function () { return sim.revealAll(state, p.id); });
+      };
+      if (reducedMotion()) return go();
+      dialog.querySelectorAll('.reveal-egg').forEach(function (b) { b.classList.add('is-cracking'); });
+      setTimeout(go, 650);
+    },
+    'book-slot': function (el) { openDialog({ type: 'book-slot', page: el.dataset.page, slot: Number(el.dataset.slot) }); },
+    'preview-pair': function (el) {
+      uis.male = el.dataset.m; uis.female = el.dataset.f;
+      sim.markTutorial(state, 'preview');
+      switchView('breeding');
+      var prev = document.querySelector('.preview');
+      if (prev) prev.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+    },
     'inc-temp-up': function (el) { act(function () { return sim.adjustIncubator(state, el.dataset.id, 'temp', 0.5); }); },
     'inc-temp-down': function (el) { act(function () { return sim.adjustIncubator(state, el.dataset.id, 'temp', -0.5); }); },
     'inc-hum-up': function (el) { act(function () { return sim.adjustIncubator(state, el.dataset.id, 'humidity', 5); }); },
