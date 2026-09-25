@@ -219,7 +219,7 @@
   ui.needs = function (state, s, e) {
     var out = [];
     if (sim.isUnrevealed(state, s)) return out;
-    if (s.health < 60) out.push({ icon: '🩺', action: 'vet', id: s.id, urgent: s.health < 40, label: 'Vet visit for ' + s.name + ' (' + U.money(SB.COSTS.vet) + ')' });
+    if (s.health < 60) out.push({ icon: '🩺', action: 'vet', id: s.id, urgent: s.health < 40, label: 'Vet visit for ' + s.name + ' (' + U.money(sim.vetCost(state)) + ')' });
     if (e) {
       // Habitat comes before routine care: only 4 bubbles fit on a tank, and
       // routine care is what Chores already covers.
@@ -558,7 +558,7 @@
         '<section><h3>Condition</h3>' + meter('health', 'Health', s.health) + meter('stress', 'Stress', s.stress) + meter('hunger', 'Hunger', s.hunger) +
           '<div class="btn-row">' +
             btn('🐭 Feed (' + U.money(sim.feedCost(s)) + ')', 'feed', 'data-id="' + s.id + '"', 'btn-primary btn-small') +
-            btn('🩺 Vet visit (' + U.money(SB.COSTS.vet) + ')', 'vet', 'data-id="' + s.id + '"', 'btn-small') +
+            btn('🩺 Vet visit (' + U.money(sim.vetCost(state)) + ')', 'vet', 'data-id="' + s.id + '"', 'btn-small') +
             btn(s.keeper ? '★ Keeper (unmark)' : '☆ Mark as keeper', 'keeper', 'data-id="' + s.id + '" aria-pressed="' + s.keeper + '"', 'btn-small') +
           '</div>' +
           (proj ? '<p class="small">' + chip('info', proj.stage === 'pairing' ? 'In a pairing' : 'Gravid') + ' Part of the ' + esc(proj.maleName) + ' × ' + esc(proj.femaleName) + ' project.</p>' : '') +
@@ -585,7 +585,8 @@
         '</section>' +
         '<section><h3>Market</h3>' +
           (sell.ok ? '<p>Estimated sale price <strong>' + U.money(sim.value(state, s)) + '</strong>.</p>' + btn('Sell ' + esc(s.name) + '…', 'sell', 'data-id="' + s.id + '"', 'btn-small') :
-            '<p class="small">' + chip('warn', 'Not ready for a new home') + ' ' + esc(sell.reasons.join('; ')) + '.</p>') +
+            '<p class="small">' + chip('warn', 'Not ready for a new home') + ' ' + esc(sell.reasons.join('; ')) + '.</p>' +
+            (sim.canSurrender(state, s) ? '<p class="small muted">Out of options? Hillside Reptile Rescue takes any snake for a ' + U.money(sim.surrenderValue(state, s)) + ' rehoming grant (−1 reputation).</p>' + btn('Send to rescue…', 'surrender', 'data-id="' + s.id + '"', 'btn-small btn-ghost') : '')) +
         '</section>' +
       '</div></div>';
   };
@@ -892,16 +893,21 @@
           : '<p class="small">' + chip('warn', matches.length ? 'Your matching snakes aren’t ready to sell yet' : 'No matching snakes yet') + '</p>') + '</li>';
     }).join('');
 
+    var lowFunds = state.money < 60;
     var sellRows = state.snakes.filter(function (s) { return !sim.isUnrevealed(state, s); }).sort(function (a, b) { return (a.keeper ? 1 : 0) - (b.keeper ? 1 : 0) || a.name.localeCompare(b.name); }).map(function (s) {
       var c = sim.canSell(state, s);
       return '<tr><th scope="row"><button type="button" class="link" data-action="open-snake" data-id="' + s.id + '">' + esc(s.name) + '</button>' + (s.keeper ? ' <span class="keeper">★<span class="sr-only"> keeper</span></span>' : '') + '<div class="small muted">' + (s.sex === 'M' ? '♂' : '♀') + ' ' + U.age(s.ageWeeks) + ' · ' + esc(G.fullLabel(s)) + '</div></th>' +
-        '<td>' + U.money(sim.value(state, s)) + '</td><td>' + (c.ok ? btn('Sell…', 'sell', 'data-id="' + s.id + '"', 'btn-small') : '<span class="small">' + chip('warn', 'Not yet') + '<span class="block muted">' + esc(c.reasons[0]) + '</span></span>') + '</td></tr>';
+        '<td>' + U.money(sim.value(state, s)) + '</td><td>' + (c.ok ? btn('Sell…', 'sell', 'data-id="' + s.id + '"', 'btn-small') : '<span class="small">' + chip('warn', 'Not yet') + '<span class="block muted">' + esc(c.reasons[0]) + '</span></span>' +
+          (lowFunds && sim.canSurrender(state, s) ? btn('Rescue ' + U.money(sim.surrenderValue(state, s)), 'surrender', 'data-id="' + s.id + '"', 'btn-small btn-ghost') : '')) + '</td></tr>';
     }).join('');
 
-    var listings = mk.listings.map(function (l) {
+    var offer = function (l) {
       return '<li class="listing"><span class="pick-art">' + SB.art.snakeSVG(l.snake, { suffix: 'l', label: '' }) + '</span><div><strong>' + esc(l.snake.name) + '</strong> · ' + sexLabel(l.snake) + '<div class="small">' + U.age(l.snake.ageWeeks) + ' · ' + l.snake.weight + ' g</div>' + geneTags(l.snake) +
-        '<div class="small muted">From ' + esc(l.seller) + '</div><div class="btn-row">' + btn('Buy for ' + U.money(l.price), 'buy', 'data-id="' + l.id + '"', 'btn-small btn-primary') + '</div></div></li>';
-    }).join('');
+        '<div class="small muted">From ' + esc(l.seller) + (l.catalog ? ' · proven genetics' : '') + '</div><div class="btn-row">' + btn('Buy for ' + U.money(l.price), 'buy', 'data-id="' + l.id + '"', 'btn-small btn-primary') + '</div></div></li>';
+    };
+    var listings = mk.listings.map(offer).join('');
+    var catalog = (mk.catalog || []).map(offer).join('');
+    var restock = 8 - (state.week % 8);
 
     var trades = mk.trades.map(function (t) {
       var matches = state.snakes.filter(function (s) { return sim.matchesCriteria(state, s, t.criteria) && sim.canSell(state, s).ok; });
@@ -915,6 +921,7 @@
       '<section class="card" aria-labelledby="rq-h"><h2 id="rq-h">Buyer requests</h2><p class="small">Buyers pay a premium for exactly what they want and it boosts your reputation.</p>' + (requests ? '<ul class="request-list">' + requests + '</ul>' : empty('No requests right now', 'New buyers appear as the weeks go by.')) + '</section>' +
       '<section class="card" aria-labelledby="sell-h"><h2 id="sell-h">Sell to vetted buyers</h2><p class="small">Only healthy, feeding snakes go to new homes. Prices reflect proven genetics, age, sex, health and your reputation.</p>' +
         (sellRows ? '<div class="table-wrap"><table class="sell-table"><thead><tr><th scope="col">Snake</th><th scope="col">Value</th><th scope="col">Action</th></tr></thead><tbody>' + sellRows + '</tbody></table></div>' : empty('Nothing to sell', 'Your collection is empty.')) + '</section>' +
+      '<section class="card" aria-labelledby="cat-h"><h2 id="cat-h">Breeder’s catalogue</h2><p class="small">Proven adults from specialist breeders, carrying genes your starters don’t. Pricier than the open market. Restocks in ' + restock + ' week' + (restock === 1 ? '' : 's') + '.</p>' + (catalog ? '<ul class="listing-list">' + catalog + '</ul>' : empty('Sold out', 'New breeders arrive when the catalogue restocks.')) + '</section>' +
       '<section class="card" aria-labelledby="buy-h"><h2 id="buy-h">Snakes looking for a home</h2>' + (listings ? '<ul class="listing-list">' + listings + '</ul>' : empty('No listings', 'Sellers post new animals every few weeks.')) + '</section>' +
       '<section class="card" aria-labelledby="trade-h"><h2 id="trade-h">Trade offers</h2>' + (trades ? '<ul class="listing-list">' + trades + '</ul>' : empty('No trade offers', 'Traders sometimes appear — check back after a few weeks.')) + '</section>' +
       '</div>';

@@ -14,11 +14,13 @@ You can also open `index.html` directly in a browser. Progress saves automatical
 ## How to play
 
 1. Start in the **Room**: each tank shows its snake, and bubbles above it flag needs (tap a bubble to feed, water, clean or fix the habitat).
-2. Press **Chores** to handle routine care for everyone, and follow the quest shown in the top bar.
+2. Press **Chores** to feed, water and clean everyone, then tap any 💦 / 🌡️ bubbles left over: humidity and heat are yours to fix until you buy climate controllers in the **Shop**. Follow the quest shown in the top bar.
 3. On **Breeding**, pick a male and female to see per-egg outcome odds, then start the pairing.
 4. Press **Next week** (or `N`) — pairing → gravid → eggs → incubation → hatch.
-5. Keep the incubator at 88–90°F and 90–100% humidity.
-6. Keep favourites (★) and sell or trade others on the **Market**; expand on **Facility**.
+5. Keep the incubator at 88–90°F and 90–100% humidity (the room's incubator card has a **Fix conditions** button).
+6. Keep favourites (★) and sell or trade others on the **Market**; expand in the **Shop**.
+7. After the first quest arc, the **Breeder's catalogue** on the Market sells proven adults carrying genes your starters lack (Yellow Belly, Mojave, Lesser, Piebald…). Use them to fill the **Morph Book**.
+8. Short on money? A hatchling's first meal is free, and if nothing can be sold, the rescue will take any snake for a small grant (−1 reputation).
 
 ## Code layout
 

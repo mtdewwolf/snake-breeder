@@ -232,7 +232,7 @@
       if (go) go.focus();
     } else {
       var todo = ui.needCount(state);
-      if (todo) toast('Week ' + report.week + ' — ' + todo + ' thing' + (todo === 1 ? ' needs' : 's need') + ' attention in the room. Try Chores.', 'warn', 'quiet-week');
+      if (todo) toast('Week ' + report.week + ' — ' + todo + ' thing' + (todo === 1 ? ' needs' : 's need') + ' attention in the room. Press Chores, then tap any bubbles left over.', 'warn', 'quiet-week');
       else toast('Week ' + report.week + ' — a quiet week in the reptile room.', 'good', 'quiet-week');
     }
   }
@@ -266,6 +266,12 @@
     'vet': function (el) { act(function () { return sim.vet(state, el.dataset.id); }); },
     'keeper': function (el) { act(function () { return sim.toggleKeeper(state, el.dataset.id); }); },
     'sell': function (el) { sellFlow(el.dataset.id); },
+    'surrender': function (el) {
+      var s = sim.snake(state, el.dataset.id);
+      if (!s) return;
+      confirmAction({ title: 'Send ' + s.name + ' to the rescue?', html: 'Hillside Reptile Rescue will rehome <strong>' + U.esc(s.name) + '</strong> and pay a <strong>' + U.money(sim.surrenderValue(state, s)) + '</strong> grant. You lose 1 reputation. This can’t be undone.', yes: 'Send to rescue', danger: true },
+        function () { act(function () { return sim.surrender(state, s.id); }); });
+    },
     'filter': function (el) { uis.filter = el.dataset.filter; uis.query = ''; persist(); render(); },
     'clear-collection-filters': function () { uis.filter = 'all'; uis.query = ''; uis.sort = 'name'; persist(); render(); },
     'dismiss-tutorial': function () { state.tutorial.dismissed = true; persist(); render(); toast('Tips hidden. You can find the full guide in the Journal.'); },
@@ -328,7 +334,7 @@
     'inc-hum-up': function (el) { act(function () { return sim.adjustIncubator(state, el.dataset.id, 'humidity', 5); }); },
     'inc-hum-down': function (el) { act(function () { return sim.adjustIncubator(state, el.dataset.id, 'humidity', -5); }); },
     'buy': function (el) {
-      var l = state.market.listings.find(function (x) { return x.id === el.dataset.id; });
+      var l = sim.findOffer(state, el.dataset.id);
       if (!l) return;
       confirmAction({ title: 'Welcome ' + l.snake.name + '?', html: 'Buy ' + U.esc(l.snake.name) + ' (' + U.esc(SB.genetics.fullLabel(l.snake)) + ') for <strong>' + U.money(l.price) + '</strong>? They’ll need a free enclosure.', yes: 'Buy for ' + U.money(l.price) },
         function () { act(function () { return sim.buy(state, l.id); }); });
