@@ -206,6 +206,7 @@
    */
   SB.CATALOG = [
     { genotype: { yellowbelly: 1 }, weight: 3 },
+    { genotype: { pinstripe: 1 }, weight: 1 },
     { genotype: { mojave: 1 }, weight: 3 },
     { genotype: { lesser: 1 }, weight: 2 },
     { genotype: { piebald: 1 }, weight: 3 },
