@@ -10,13 +10,13 @@
   var ui = {};
 
   ui.VIEWS = [
-    { id: 'overview', label: 'Overview', icon: '🏡' },
-    { id: 'collection', label: 'Collection', icon: '🐍' },
-    { id: 'breeding', label: 'Breeding', icon: '🧬' },
-    { id: 'incubation', label: 'Incubation', icon: '🥚' },
-    { id: 'book', label: 'Morph Book', icon: '📘' },
+    { id: 'overview', label: 'Room', icon: '🏡' },
+    { id: 'collection', label: 'Snakes', icon: '🐍' },
+    { id: 'breeding', label: 'Breed', icon: '💞' },
+    { id: 'incubation', label: 'Eggs', icon: '🥚' },
+    { id: 'book', label: 'Book', icon: '📘' },
     { id: 'market', label: 'Market', icon: '🏷️' },
-    { id: 'facility', label: 'Facility', icon: '🛠️' },
+    { id: 'facility', label: 'Shop', icon: '🛠️' },
     { id: 'journal', label: 'Journal', icon: '📖' }
   ];
 
@@ -110,24 +110,60 @@
 
   /* ---------- Header / tabs ---------- */
 
+  var COIN = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10.5" fill="#f2b632" stroke="#a8740f" stroke-width="1.5"/><circle cx="12" cy="12" r="7" fill="none" stroke="#fbd970" stroke-width="1.4"/><text x="12" y="16.2" text-anchor="middle" font-size="11" font-weight="900" fill="#8a5d08" font-family="Arial, sans-serif">$</text></svg>';
+
+  function res(kind, icon, value, label, count) {
+    return '<div class="res res-' + kind + '" title="' + esc(label) + '"><span class="res-icon" aria-hidden="true">' + icon + '</span>' +
+      '<span class="res-val"' + (count != null ? ' data-count="' + kind + '" data-value="' + count + '"' : '') + '>' + value + '</span><span class="sr-only"> ' + esc(label) + '</span></div>';
+  }
+
   ui.renderTop = function (state) {
     var cap = state.enclosures.length, used = state.snakes.filter(function (s) { return s.enclosureId; }).length;
-    return '' +
-      '<div class="stat-pill"><span class="stat-label">Week</span><span class="stat-value">' + state.week + '</span></div>' +
-      '<div class="stat-pill"><span class="stat-label">Funds</span><span class="stat-value">' + U.money(state.money) + '</span></div>' +
-      '<div class="stat-pill"><span class="stat-label">Reputation</span><span class="stat-value">★ ' + state.reputation + '</span></div>' +
-      '<div class="stat-pill"><span class="stat-label">Housing</span><span class="stat-value">' + used + ' / ' + cap + '</span></div>';
+    return res('coin', COIN, U.money(state.money), 'Funds', Math.round(state.money)) +
+      res('rep', '★', String(state.reputation), 'Reputation', state.reputation) +
+      res('week', '📅', 'Wk ' + state.week, 'Week') +
+      res('house', '🏠', used + '/' + cap, 'Enclosures in use');
+  };
+
+  function ring(p, size) {
+    var r = size / 2 - 3, c = 2 * Math.PI * r;
+    return '<svg class="ring" viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '" aria-hidden="true">' +
+      '<circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="4"/>' +
+      '<circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" stroke="#f2b632" stroke-width="4" stroke-linecap="round" stroke-dasharray="' + (c * p).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 ' + size / 2 + ' ' + size / 2 + ')"/></svg>';
+  }
+
+  ui.renderQuest = function (state) {
+    var g = sim.currentGoal(state);
+    if (!g) return '<button type="button" class="quest" data-action="quest"><span class="quest-ring">🏆</span><span class="quest-text"><span class="quest-label">Quests</span><span class="quest-title">All complete!</span></span></button>';
+    var p = Math.min(1, g.check(state, SB));
+    return '<button type="button" class="quest" data-action="quest" aria-label="Current quest: ' + esc(g.title) + ', ' + Math.round(p * 100) + '% complete. Show details">' +
+      '<span class="quest-ring">' + ring(p, 38) + '<span class="quest-pct">' + Math.round(p * 100) + '%</span></span>' +
+      '<span class="quest-text"><span class="quest-label">Quest ' + (state.goalsDone.length + 1) + '/' + SB.GOALS.length + '</span><span class="quest-title">' + esc(g.title) + '</span></span></button>';
+  };
+
+  ui.questDetail = function (state) {
+    var g = sim.currentGoal(state);
+    if (!g) return '<p>You’ve completed every quest. Keep filling your Morph Book!</p>' + btn('Open Morph Book', 'view', 'data-view="book"', 'btn-primary');
+    var p = Math.min(1, g.check(state, SB));
+    var reward = [g.reward.money ? U.money(g.reward.money) : '', g.reward.rep ? '+' + g.reward.rep + ' ★ reputation' : ''].filter(Boolean).join(' and ');
+    return '<div class="quest-detail"><div class="quest-big-ring">' + ring(p, 96).replace('rgba(255,255,255,.18)', '#eadcbc') + '<span>' + Math.round(p * 100) + '%</span></div>' +
+      '<div><p class="lead">' + esc(g.desc) + '</p><p><span class="reward-pill">Reward: ' + esc(reward) + '</span></p></div></div>' +
+      '<h3>Quest line</h3><ol class="quest-line">' + SB.GOALS.map(function (q) {
+        var done = state.goalsDone.indexOf(q.id) >= 0, cur = q === g;
+        return '<li class="' + (done ? 'is-done' : cur ? 'is-current' : 'is-locked') + '"><span class="ql-dot" aria-hidden="true">' + (done ? '✓' : cur ? '●' : '🔒') + '</span><span>' + esc(q.title) + (done ? '<span class="sr-only"> (done)</span>' : cur ? '<span class="sr-only"> (current)</span>' : '<span class="sr-only"> (locked)</span>') + '</span></li>';
+      }).join('') + '</ol>';
   };
 
   ui.renderTabs = function (current, state) {
     var badges = {
       incubation: sim.activeProjects(state).filter(function (p) { return p.stage === 'incubating'; }).length + sim.pendingReveals(state).length,
-      collection: state.snakes.length
+      overview: ui.needCount(state)
     };
     return ui.VIEWS.map(function (v) {
-      var b = badges[v.id] ? '<span class="tab-badge" aria-label="(' + badges[v.id] + ')">' + badges[v.id] + '</span>' : '';
-      return '<button type="button" class="tab' + (v.id === current ? ' is-active' : '') + '" data-action="view" data-view="' + v.id + '"' +
-        (v.id === current ? ' aria-current="page"' : '') + '><span aria-hidden="true">' + v.icon + '</span> ' + v.label + b + '</button>';
+      var n = badges[v.id];
+      var b = n ? '<span class="dock-badge' + (v.id === 'overview' ? ' is-alert' : '') + '"><span class="sr-only">(</span>' + n + '<span class="sr-only">)</span></span>' : '';
+      return '<button type="button" class="dock-btn' + (v.id === current ? ' is-active' : '') + '" data-action="view" data-view="' + v.id + '"' +
+        (v.id === current ? ' aria-current="page"' : '') + '><span class="dock-icon" aria-hidden="true">' + v.icon + '</span><span class="dock-label">' + v.label + '</span>' + b + '</button>';
     }).join('');
   };
 
@@ -155,73 +191,155 @@
     return list.sort(function (a, b) { return (a.level === 'bad' ? 0 : 1) - (b.level === 'bad' ? 0 : 1); });
   };
 
-  function goalCard(state) {
-    var g = sim.currentGoal(state);
-    if (!g) return '<section class="card goal-card"><h2>All goals complete</h2><p>You’ve completed every goal. Keep refining your collection and chasing new morph discoveries!</p></section>';
-    var p = g.check(state, SB);
-    var reward = [g.reward.money ? U.money(g.reward.money) : '', g.reward.rep ? '+' + g.reward.rep + ' reputation' : ''].filter(Boolean).join(' · ');
-    return '<section class="card goal-card" aria-labelledby="goal-h">' +
-      '<p class="eyebrow">Current goal · ' + (state.goalsDone.length + 1) + ' of ' + SB.GOALS.length + '</p>' +
-      '<h2 id="goal-h">' + esc(g.title) + '</h2><p>' + esc(g.desc) + '</p>' +
-      '<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(p * 100) + '" aria-label="Goal progress"><div style="width:' + Math.round(p * 100) + '%"></div></div>' +
-      '<p class="small muted">Progress ' + Math.round(p * 100) + '% · Reward: ' + esc(reward) + '</p></section>';
+  /* ---------- Reptile room (home) ---------- */
+
+  /* Things a snake or its enclosure needs, as tappable bubbles. */
+  ui.needs = function (state, s, e) {
+    var out = [];
+    if (sim.isUnrevealed(state, s)) return out;
+    if (s.health < 60) out.push({ icon: '🩺', action: 'vet', id: s.id, urgent: s.health < 40, label: 'Vet visit for ' + s.name + ' (' + U.money(SB.COSTS.vet) + ')' });
+    if (s.hunger >= 35) out.push({ icon: '🐭', action: 'feed', id: s.id, urgent: s.hunger > 80, label: 'Feed ' + s.name + ' (' + U.money(sim.feedCost(s)) + ')' });
+    if (e) {
+      if (e.water < 70) out.push({ icon: '💧', action: 'water', id: e.id, urgent: e.water < 40, label: 'Fresh water for ' + s.name });
+      if (e.clean < 70) out.push({ icon: '🧽', action: 'clean', id: e.id, urgent: e.clean < 40, label: 'Clean ' + e.name + ' (' + U.money(SB.COSTS.cleanEnclosure) + ')' });
+      var t = U.rate(e.temp, CARE.temp), h = U.rate(e.humidity, CARE.humidity);
+      if (t.level !== 'good') out.push({ icon: '🌡️', action: 'fix-temp', id: e.id, urgent: t.level === 'bad', label: e.name + ' is ' + t.text.toLowerCase() + ' (' + e.temp + '°F). Reset the thermostat to 90°F' });
+      if (h.level !== 'good') out.push({ icon: e.humidity < CARE.humidity.ideal[0] ? '💦' : '🌬️', action: 'fix-hum', id: e.id, urgent: h.level === 'bad', label: (e.humidity < CARE.humidity.ideal[0] ? 'Mist ' : 'Ventilate ') + e.name + ' (humidity ' + e.humidity + '%)' });
+      if (e.kind === 'tub' && s.weight > T.tubMaxWeight) out.push({ icon: '📦', action: 'open-snake', id: s.id, urgent: false, label: s.name + ' has outgrown this tub. Move to a bigger enclosure' });
+    }
+    return out;
+  };
+
+  ui.needCount = function (state) {
+    return state.snakes.reduce(function (n, s) { return n + ui.needs(state, s, sim.enclosureOf(state, s)).length; }, 0) + sim.homeless(state).length;
+  };
+
+  function bubble(nd) {
+    return '<button type="button" class="bubble' + (nd.urgent ? ' is-urgent' : '') + '" data-action="' + nd.action + '" data-id="' + nd.id + '" aria-label="' + esc(nd.label) + '" title="' + esc(nd.label) + '"><span aria-hidden="true">' + nd.icon + '</span></button>';
   }
 
-  function tutorialCard(state) {
+  function hearts(h) {
+    var full = Math.round(h / 20), out = '';
+    for (var i = 0; i < 5; i++) out += '<span class="' + (i < full ? 'on' : 'off') + '">♥</span>';
+    return '<span class="hearts" title="Health ' + Math.round(h) + '" aria-label="Health ' + Math.round(h) + ' of 100">' + out + '</span>';
+  }
+
+  function bowl(water) {
+    var col = SB.art.mix('#8a7a3a', '#6cc0e8', U.clamp(water, 0, 100) / 100);
+    return '<svg class="tank-bowl" viewBox="0 0 40 18" aria-hidden="true"><ellipse cx="20" cy="10" rx="18" ry="7" fill="#8d8f93"/><ellipse cx="20" cy="8.5" rx="14.5" ry="5" fill="' + col + '"/><ellipse cx="15" cy="7.5" rx="4" ry="1.4" fill="#fff" opacity=".5"/></svg>';
+  }
+
+  function thermo(e) {
+    var t = U.rate(e.temp, CARE.temp);
+    var pct = U.clamp((e.temp - 80) / 18, 0.05, 1) * 100;
+    return '<span class="thermo thermo-' + t.level + '" title="' + e.temp + '°F — ' + t.text + '"><span class="thermo-fill" style="height:' + pct.toFixed(0) + '%"></span></span>';
+  }
+
+  function tank(state, e) {
+    var s = sim.occupant(state, e);
+    if (!s) {
+      return '<li class="tank tank-' + e.kind + ' is-empty"><div class="tank-bubbles"></div>' +
+        '<button type="button" class="tank-glass" data-action="view" data-view="market" aria-label="' + esc(e.name) + ' is empty. Find a snake on the Market">' +
+        '<span class="tank-empty-label"><span aria-hidden="true">+</span> Empty</span><span class="tank-shine"></span></button>' +
+        '<div class="tank-plate"><span class="tank-name">' + esc(e.name) + '</span></div></li>';
+    }
+    var unrev = sim.isUnrevealed(state, s);
+    var proj = unrev ? sim.projectOfBaby(state, s) : sim.projectFor(state, s);
+    var needs = ui.needs(state, s, e);
+    var tag = '';
+    if (!unrev && proj && proj.stage === 'pairing') tag = '<span class="tank-tag">💞 Pairing</span>';
+    else if (!unrev && proj && proj.stage === 'gravid') tag = '<span class="tank-tag">🥚 Gravid</span>';
+    else if (s.recoveryUntil > state.week) tag = '<span class="tank-tag">🌙 Resting</span>';
+    else if (s.keeper) tag = '<span class="tank-tag">★ Keeper</span>';
+    var label = unrev ? 'Unopened egg in ' + e.name + '. Crack it open' : s.name + ', ' + (s.sex === 'M' ? 'male' : 'female') + ' ' + G.morphLabel(s.genotype) + ', in ' + e.name + '. Open details';
+    return '<li class="tank tank-' + e.kind + (needs.some(function (n) { return n.urgent; }) ? ' is-urgent' : '') + '">' +
+      '<div class="tank-bubbles">' + needs.slice(0, 4).map(bubble).join('') + '</div>' +
+      '<button type="button" class="tank-glass" data-action="' + (unrev ? 'hatch-results' : 'open-snake') + '" data-id="' + (unrev ? proj.id : s.id) + '" aria-label="' + esc(label) + '">' +
+        (unrev ? '<span class="tank-egg">' + bigEgg(s.id + 'k') + '</span>' : '<span class="tank-snake">' + SB.art.snakeSVG(s, { suffix: 'k', label: '' }) + '</span>') +
+        '<span class="tank-grime" style="opacity:' + ((1 - e.clean / 100) * 0.95).toFixed(2) + '"></span>' +
+        bowl(e.water) + thermo(e) + tag +
+        '<span class="tank-shine"></span>' +
+      '</button>' +
+      '<div class="tank-plate"><span class="tank-name"><span class="' + (s.sex === 'M' ? 'sex-m' : 'sex-f') + '" aria-hidden="true">' + (s.sex === 'M' ? '♂' : '♀') + '</span> ' + esc(s.name) + '</span>' +
+        (unrev ? '<span class="tank-sub">Egg</span>' : hearts(s.health)) + '</div></li>';
+  }
+
+  function shelf(state, title, list) {
+    if (!list.length) return '';
+    return '<div class="shelf"><h3 class="shelf-label">' + esc(title) + '</h3><ul class="shelf-row shelf-' + list[0].kind + '">' + list.map(function (e) { return tank(state, e); }).join('') + '</ul></div>';
+  }
+
+  function incubatorWidget(state, inc) {
+    var p = sim.activeProjects(state).find(function (x) { return x.incubatorId === inc.id; });
+    var t = U.rate(inc.temp, CARE.incubTemp), h = U.rate(inc.humidity, CARE.incubHumidity);
+    var incubating = p && p.stage === 'incubating';
+    var alert = incubating && (t.level !== 'good' || h.level !== 'good');
+    var status, weeks = 0, total = 1;
+    if (!p) status = 'Idle — start a pairing';
+    else if (p.stage === 'pairing') { status = '💞 ' + p.maleName + ' × ' + p.femaleName + ' pairing'; weeks = p.weeksInStage; total = T.pairingWeeks; }
+    else if (p.stage === 'gravid') { status = '🤰 ' + p.femaleName + ' is gravid'; weeks = p.weeksInStage; total = T.gravidWeeks; }
+    else { status = '🥚 Hatching in ' + (T.incubationWeeks - p.weeksInStage) + ' wk'; weeks = p.weeksInStage; total = T.incubationWeeks; }
+    var eggs = incubating ? p.eggs.map(function (egg) { return '<span class="mini-egg' + (egg.status === 'failed' ? ' is-failed' : egg.health < 50 ? ' is-weak' : '') + '"></span>'; }).join('') : '';
+    return '<div class="incubator-box' + (alert ? ' is-alert' : '') + '">' +
+      '<div class="inc-top"><strong>' + esc(inc.name) + '</strong>' +
+        '<span class="led led-' + t.level + '" title="Temperature: ' + t.text + '">' + inc.temp + '°F</span>' +
+        '<span class="led led-' + h.level + '" title="Humidity: ' + h.text + '">' + inc.humidity + '%</span></div>' +
+      '<button type="button" class="inc-window" data-action="view" data-view="' + (p ? 'incubation' : 'breeding') + '" aria-label="' + esc(inc.name + ': ' + status) + '">' +
+        (eggs ? '<span class="mini-eggs">' + eggs + '</span>' : '<span class="inc-empty">' + (p ? (p.stage === 'pairing' ? '💞' : '⏳') : '·  ·  ·') + '</span>') + '</button>' +
+      '<p class="inc-status">' + esc(status) + '</p>' +
+      (p ? '<div class="inc-progress"><div style="width:' + Math.round(weeks / total * 100) + '%"></div></div>' : '') +
+      (alert ? '<button type="button" class="btn btn-small btn-primary inc-fix" data-action="fix-incubator" data-id="' + inc.id + '">🌡️ Fix conditions</button>' : '') +
+      '</div>';
+  }
+
+  function coach(state) {
     if (state.tutorial.dismissed) return '';
     var done = state.tutorial.done;
-    var allDone = SB.TUTORIAL.every(function (t) { return done[t.id]; });
-    return '<section class="card tutorial" aria-labelledby="tut-h">' +
-      '<div class="card-head"><h2 id="tut-h">First steps</h2>' + btn('Hide tips', 'dismiss-tutorial', '', 'btn-small btn-ghost') + '</div>' +
-      (allDone ? '<p>' + chip('good', 'You’ve tried every core action!') + ' You can hide these tips now.</p>' : '') +
-      '<ol class="checklist">' + SB.TUTORIAL.map(function (t) {
-        return '<li class="' + (done[t.id] ? 'is-done' : '') + '"><span class="check" aria-hidden="true">' + (done[t.id] ? '✓' : '○') + '</span><span>' + esc(t.text) + (done[t.id] ? '<span class="sr-only"> (done)</span>' : '') + '</span></li>';
-      }).join('') + '</ol></section>';
-  }
-
-  function projectSummary(state, p) {
-    var stages = {
-      pairing: { label: 'Pairing', total: T.pairingWeeks, next: 'waiting to see if she ovulates' },
-      gravid: { label: 'Gravid', total: T.gravidWeeks, next: 'eggs on the way' },
-      incubating: { label: 'Incubating', total: T.incubationWeeks, next: 'eggs developing' }
-    };
-    var st = stages[p.stage];
-    var left = st.total - p.weeksInStage;
-    var eggs = p.stage === 'incubating' ? ' · ' + p.eggs.filter(function (e) { return e.status === 'good'; }).length + ' eggs' : '';
-    return '<li class="project-row"><div><strong>' + esc(p.maleName) + ' × ' + esc(p.femaleName) + '</strong><div class="small muted">' + st.label + ' — ' + st.next + eggs + '</div></div>' +
-      '<div class="project-time">' + chip('info', left + ' wk' + (left === 1 ? '' : 's') + ' left') + '</div></li>';
+    var idx = SB.TUTORIAL.findIndex(function (t) { return !done[t.id]; });
+    var text = idx < 0 ? 'You’ve tried every core action. Nice work, keeper! You can hide these tips now.' : SB.TUTORIAL[idx].text;
+    return '<section class="coach" aria-label="Tip">' +
+      '<svg class="coach-mascot" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#4f7d33"/><path d="M11 30c0-9 8-15 15-13s9 9 3 12-10-1-7-6" stroke="#f2b632" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="21.5" cy="23" r="1.6" fill="#2f2418"/></svg>' +
+      '<div class="coach-bubble"><p class="coach-step">' + (idx < 0 ? 'All tips done' : 'Tip ' + (idx + 1) + ' of ' + SB.TUTORIAL.length) + '</p><p>' + esc(text) + '</p>' +
+        '<span class="coach-dots" aria-hidden="true">' + SB.TUTORIAL.map(function (t) { return '<span class="' + (done[t.id] ? 'on' : '') + '"></span>'; }).join('') + '</span></div>' +
+      btn('Hide tips', 'dismiss-tutorial', '', 'btn-small btn-ghost coach-hide') + '</section>';
   }
 
   ui.overview = function (state) {
-    var alerts = ui.alerts(state);
-    var active = sim.activeProjects(state);
-    var free = sim.freeEnclosures(state).length;
-    var lastHatch = state.lastHatch && state.projects.find(function (p) { return p.id === state.lastHatch.projectId; });
     var pending = sim.pendingReveals(state);
     var pendingEggs = pending.reduce(function (n, p) { return n + sim.unrevealedCount(state, p); }, 0);
-    return '<div class="grid-overview">' +
-      '<section class="tiles" aria-label="Operation summary">' +
-        tile('Funds', U.money(state.money), 'Earn by selling healthy snakes') +
-        tile('Reputation', '★ ' + state.reputation, 'Boosts prices by ' + Math.round((sim.priceMultiplier(state) - 1) * 100) + '%') +
-        tile('Housing', (state.enclosures.length - free) + ' / ' + state.enclosures.length, free + ' free enclosure' + (free === 1 ? '' : 's')) +
-        tile('Breeding', active.length + ' active', sim.freeIncubators(state).length + ' of ' + state.incubators.length + ' incubator' + (state.incubators.length === 1 ? '' : 's') + ' free') +
-      '</section>' +
-      (pending.length ? '<section class="card reveal-banner"><div class="reveal-banner-eggs" aria-hidden="true">' + bigEgg('ov1') + bigEgg('ov2') + '</div><div><h2>Eggs are pipping!</h2><p>' + pendingEggs + ' hatchling' + (pendingEggs === 1 ? ' is' : 's are') + ' waiting inside ' + (pendingEggs === 1 ? 'its egg' : 'their eggs') + '. Crack them open to see what you bred.</p>' + btn('Crack them open', 'hatch-results', 'data-id="' + pending[0].id + '"', 'btn-primary') + '</div></section>' : '') +
-      goalCard(state) +
-      tutorialCard(state) +
-      (!pending.length && lastHatch ? '<section class="card hatch-banner"><h2>🐣 Latest hatch · week ' + state.lastHatch.week + '</h2><p>' + lastHatch.babies.length + ' hatchlings from ' + esc(lastHatch.maleName) + ' × ' + esc(lastHatch.femaleName) + '.</p>' + btn('See hatch results', 'hatch-results', 'data-id="' + lastHatch.id + '"', 'btn-small') + '</section>' : '') +
-      '<section class="card" aria-labelledby="att-h"><div class="card-head"><h2 id="att-h">Needs attention</h2>' + btn('🧺 Care round', 'care-round', '', 'btn-small') + '</div>' +
-        (alerts.length ? '<ul class="alert-list">' + alerts.slice(0, 10).map(function (a) {
-          return '<li class="alert alert-' + a.level + '">' + chip(a.level, a.level === 'bad' ? 'Urgent' : 'Check') + '<span class="alert-text">' + esc(a.text) + '</span>' + a.action + '</li>';
-        }).join('') + '</ul>' + (alerts.length > 10 ? '<p class="small muted">…and ' + (alerts.length - 10) + ' more.</p>' : '')
-          : empty('All good!', 'Every snake is fed, housed and comfortable. Advance the week when you’re ready.')) +
-      '</section>' +
-      '<section class="card" aria-labelledby="proj-h"><h2 id="proj-h">Breeding projects</h2>' +
-        (active.length ? '<ul class="project-list">' + active.map(function (p) { return projectSummary(state, p); }).join('') + '</ul>'
-          : empty('No active projects', 'Visit the Breeding tab to preview a pairing.', btn('Go to Breeding', 'view', 'data-view="breeding"', 'btn-small'))) +
-      '</section>' +
-      '<section class="card" aria-labelledby="log-h"><h2 id="log-h">Recent events</h2>' + logList(state.log.slice(0, 8)) + '</section>' +
-      '</div>';
+    var adults = state.enclosures.filter(function (e) { return e.kind === 'adult'; });
+    var tubs = state.enclosures.filter(function (e) { return e.kind === 'tub'; });
+    var homeless = sim.homeless(state);
+    var count = { feed: 0, water: 0, clean: 0, habitat: 0, vet: 0 };
+    state.snakes.forEach(function (s) {
+      ui.needs(state, s, sim.enclosureOf(state, s)).forEach(function (n) {
+        if (n.action === 'feed') count.feed++; else if (n.action === 'water') count.water++; else if (n.action === 'clean') count.clean++; else if (n.action === 'vet') count.vet++; else count.habitat++;
+      });
+    });
+    var chips = [];
+    if (count.feed) chips.push('🐭 ' + count.feed + ' hungry');
+    if (count.water) chips.push('💧 ' + count.water + ' water');
+    if (count.clean) chips.push('🧽 ' + count.clean + ' dirty');
+    if (count.habitat) chips.push('🌡️ ' + count.habitat + ' habitat');
+    if (count.vet) chips.push('🩺 ' + count.vet + ' unwell');
+    var lastHatch = !pending.length && state.lastHatch && state.projects.find(function (p) { return p.id === state.lastHatch.projectId; });
+    return '<div class="room">' +
+      coach(state) +
+      (pending.length ? '<section class="card reveal-banner"><div class="reveal-banner-eggs" aria-hidden="true">' + bigEgg('ov1') + bigEgg('ov2') + '</div><div><h2>Eggs are pipping!</h2><p>' + pendingEggs + ' hatchling' + (pendingEggs === 1 ? ' is' : 's are') + ' waiting inside ' + (pendingEggs === 1 ? 'its egg' : 'their eggs') + '. Crack them open to see what you bred.</p>' + btn('🥚 Crack them open', 'hatch-results', 'data-id="' + pending[0].id + '"', 'btn-primary') + '</div></section>' : '') +
+      '<div class="room-layout">' +
+        '<section class="rack-panel" aria-labelledby="rack-h">' +
+          '<div class="rack-head"><h2 id="rack-h">Reptile room</h2>' +
+            (chips.length ? '<p class="need-chips">' + chips.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</p>' : '<p class="need-chips is-calm"><span>✓ Everyone is comfortable</span></p>') + '</div>' +
+          '<p class="rack-hint">Tap a bubble to take care of it, or a tank to visit the snake.</p>' +
+          shelf(state, 'Adult enclosures', adults) + shelf(state, 'Hatchling rack', tubs) +
+          (homeless.length ? '<div class="holding" role="alert"><strong>📦 Temporary holding: ' + homeless.map(function (h) { return esc(h.name); }).join(', ') + '</strong><span>Cramped holding tubs stress snakes. Buy a tub and they’ll move in automatically.</span>' + btn('Go to Shop', 'view', 'data-view="facility"', 'btn-small btn-primary') + '</div>' : '') +
+        '</section>' +
+        '<aside class="side-table" aria-label="Incubators and notes">' +
+          '<section class="card side-card"><h2>Incubators</h2>' + state.incubators.map(function (inc) { return incubatorWidget(state, inc); }).join('') + '</section>' +
+          (lastHatch ? '<section class="card side-card"><h2>🐣 Last hatch</h2><p class="small">' + lastHatch.babies.length + ' babies from ' + esc(lastHatch.maleName) + ' × ' + esc(lastHatch.femaleName) + ' (week ' + lastHatch.hatchWeek + ').</p>' + btn('See results', 'hatch-results', 'data-id="' + lastHatch.id + '"', 'btn-small') + '</section>' : '') +
+          '<section class="card side-card notes"><h2>Keeper’s notes</h2>' + logList(state.log.slice(0, 5)) + btn('Full log', 'journal-log', '', 'btn-small btn-ghost') + '</section>' +
+        '</aside>' +
+      '</div></div>';
   };
 
   function tile(label, value, sub) {

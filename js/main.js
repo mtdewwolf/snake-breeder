@@ -49,11 +49,32 @@
     try { localStorage.setItem(UI_KEY, JSON.stringify({ view: uis.view, filter: uis.filter, sort: uis.sort })); } catch (e) { /* optional */ }
   }
 
+  /* Floating "+$50" style numbers rising from where the player tapped. */
+  var lastRect = null;
+  function floater(text, kind, rect, offset) {
+    if (!rect || reducedMotion()) return;
+    var el = document.createElement('div');
+    el.className = 'floater floater-' + kind;
+    el.textContent = text;
+    el.style.left = (rect.left + rect.width / 2) + 'px';
+    el.style.top = (rect.top + (offset || 0)) + 'px';
+    $('floaters').appendChild(el);
+    setTimeout(function () { el.remove(); }, 1300);
+  }
+  function floatDeltas(money, rep, rect) {
+    rect = rect || lastRect;
+    var dm = Math.round(state.money - money), dr = state.reputation - rep;
+    if (dm) floater((dm > 0 ? '+' : '−') + U.money(Math.abs(dm)), dm > 0 ? 'gain' : 'spend', rect);
+    if (dr) floater((dr > 0 ? '+' : '−') + Math.abs(dr) + ' ★', 'rep', rect, -26);
+  }
+
   /* Run an action, show its result, check goals, save and re-render. */
   function act(fn) {
+    var money = state.money, rep = state.reputation;
     var res = fn();
     if (res && res.msg) toast(res.msg, res.ok ? 'good' : 'bad');
     sim.checkGoals(state).forEach(function (m) { toast(m, 'good'); });
+    floatDeltas(money, rep);
     persist();
     render();
     return res;
@@ -61,8 +82,31 @@
 
   /* ---------- Rendering ---------- */
 
+  /* HUD counters tick toward their new value and bump when they change. */
+  var shown = {};
+  function animateCounters() {
+    document.querySelectorAll('[data-count]').forEach(function (el) {
+      var key = el.dataset.count, to = Number(el.dataset.value), from = shown[key];
+      shown[key] = to;
+      if (from == null || from === to) return;
+      var fmt = key === 'coin' ? function (v) { return U.money(v); } : function (v) { return String(Math.round(v)); };
+      var box = el.closest('.res');
+      if (box) { box.classList.remove('bump', 'bump-down'); void box.offsetWidth; box.classList.add(to > from ? 'bump' : 'bump-down'); }
+      if (reducedMotion()) return;
+      var t0 = performance.now(), dur = 650;
+      el.textContent = fmt(from);
+      (function step(now) {
+        var k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+        el.textContent = fmt(from + (to - from) * e);
+        if (k < 1) requestAnimationFrame(step);
+      })(t0);
+    });
+  }
+
   function render() {
     $('top-stats').innerHTML = ui.renderTop(state);
+    $('quest').innerHTML = ui.renderQuest(state);
+    animateCounters();
     $('tabs').innerHTML = ui.renderTabs(uis.view, state);
     var view = ui[uis.view] ? uis.view : 'overview';
     var scrollY = window.scrollY;
@@ -74,6 +118,7 @@
   function renderDialog() {
     if (!dialogState || !dialog.open) return;
     var body = $('dialog-body'), title = $('dialog-title');
+    dialog.dataset.kind = dialogState.type;
     var scroll = dialog.querySelector('.dialog-inner').scrollTop;
     if (dialogState.type === 'snake') {
       var s = sim.snake(state, dialogState.id);
@@ -87,6 +132,12 @@
       title.textContent = closed ? '🥚 Crack the eggs!' : '🐣 Hatch results';
       body.innerHTML = ui.hatchResults(state, p, freshReveals);
       freshReveals = {};
+    } else if (dialogState.type === 'quest') {
+      title.textContent = '🎯 ' + (sim.currentGoal(state) ? sim.currentGoal(state).title : 'Quests');
+      body.innerHTML = ui.questDetail(state);
+    } else if (dialogState.type === 'recap') {
+      title.textContent = 'Week ' + dialogState.report.week;
+      body.innerHTML = recapHTML(dialogState);
     } else if (dialogState.type === 'book-slot') {
       var page = SB.BOOK.find(function (x) { return x.id === dialogState.page; });
       var slot = page && page.slots[dialogState.slot];
@@ -139,19 +190,42 @@
     if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
   }
 
+  function recapHTML(ds) {
+    var r = ds.report, icons = { good: '✓', warn: '!', bad: '✕', info: '•' };
+    var delta = function (v, fmt, label) {
+      if (!v) return '';
+      return '<span class="recap-delta ' + (v > 0 ? 'is-up' : 'is-down') + '">' + (v > 0 ? '+' : '−') + fmt(Math.abs(v)) + ' <small>' + label + '</small></span>';
+    };
+    var evs = r.events.concat(r.goals.map(function (g) { return { text: g, kind: 'good' }; }));
+    return '<div class="recap">' +
+      '<div class="recap-cal" aria-hidden="true"><span>Week</span><strong>' + r.week + '</strong></div>' +
+      '<div class="recap-deltas">' + delta(ds.money, U.money, 'funds') + delta(ds.rep, String, 'reputation') + (!ds.money && !ds.rep ? '<span class="recap-delta">No change in funds</span>' : '') + '</div>' +
+      (evs.length ? '<ul class="recap-events">' + evs.slice(0, 7).map(function (e) {
+        return '<li class="log-' + e.kind + '"><span class="log-icon" aria-hidden="true">' + (icons[e.kind] || '•') + '</span><span>' + U.esc(e.text) + '</span></li>';
+      }).join('') + '</ul>' + (evs.length > 7 ? '<p class="small muted">…and ' + (evs.length - 7) + ' more in the Journal.</p>' : '') : '<p class="recap-quiet">A quiet week in the reptile room.</p>') +
+      '<div class="btn-row end">' + (ds.hatchId
+        ? '<button type="button" class="btn btn-primary btn-big" data-action="hatch-results" data-id="' + ds.hatchId + '">🥚 Crack the eggs!</button>'
+        : '<button type="button" class="btn btn-primary btn-big" data-action="close-dialog">Continue</button>') + '</div></div>';
+  }
+
   function advance() {
+    if (dialog.open) closeDialog();
     var hatchBefore = state.lastHatch && state.lastHatch.week;
+    var money = state.money, rep = state.reputation;
     var report = sim.advanceWeek(state);
+    var hatched = state.lastHatch && state.lastHatch.week !== hatchBefore && state.lastHatch.week === state.week;
+    if (hatched) state.lastHatch.seen = true;
     persist();
+    document.body.classList.remove('week-turn'); void document.body.offsetWidth; document.body.classList.add('week-turn');
     render();
-    var bad = report.events.filter(function (e) { return e.kind === 'bad'; }).length;
-    toast('Week ' + report.week + ' begins. ' + (report.events.length ? report.events.length + ' event' + (report.events.length === 1 ? '' : 's') + ' in the log.' : 'A quiet week.'), bad ? 'warn' : 'good');
-    report.events.slice(0, 3).forEach(function (e) { toast(e.text, e.kind === 'info' ? 'good' : e.kind); });
-    report.goals.forEach(function (m) { toast(m, 'good'); });
-    if (state.lastHatch && state.lastHatch.week !== hatchBefore && state.lastHatch.week === state.week) {
-      state.lastHatch.seen = true;
-      persist();
-      openDialog({ type: 'hatch', id: state.lastHatch.projectId });
+    var fab = document.querySelector('.fab-next');
+    floatDeltas(money, rep, fab && fab.getBoundingClientRect());
+    if (hatched || report.events.length || report.goals.length) {
+      openDialog({ type: 'recap', report: report, money: Math.round(state.money - money), rep: state.reputation - rep, hatchId: hatched ? state.lastHatch.projectId : null });
+      var go = dialog.querySelector('.recap .btn-primary');
+      if (go) go.focus();
+    } else {
+      toast('Week ' + report.week + ' — a quiet week in the reptile room.', 'good');
     }
   }
 
@@ -200,6 +274,11 @@
       confirmAction({ title: 'Separate this pair?', html: 'The pairing will end without eggs and the incubator becomes free.', yes: 'Separate' }, function () { act(function () { return sim.cancelPairing(state, el.dataset.id); }); });
     },
     'hatch-results': function (el) { openDialog({ type: 'hatch', id: el.dataset.id }); },
+    'fix-temp': function (el) { act(function () { return sim.resetThermostat(state, el.dataset.id); }); },
+    'fix-hum': function (el) { act(function () { return sim.resetHumidity(state, el.dataset.id); }); },
+    'fix-incubator': function (el) { act(function () { return sim.tuneIncubator(state, el.dataset.id); }); },
+    'quest': function () { openDialog({ type: 'quest' }); },
+    'journal-log': function () { uis.journalTab = 'log'; switchView('journal'); },
     'reveal': function (el) {
       if (el.classList.contains('is-cracking')) return;
       var pid = el.dataset.project, id = el.dataset.id;
@@ -275,6 +354,7 @@
   document.addEventListener('click', function (ev) {
     var el = ev.target.closest('[data-action]');
     if (!el) return;
+    lastRect = el.getBoundingClientRect();
     var fn = actions[el.dataset.action];
     if (fn) { ev.preventDefault(); fn(el); }
   });

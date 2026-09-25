@@ -13,10 +13,10 @@ You can also open `index.html` directly in a browser. Progress saves automatical
 
 ## How to play
 
-1. Check the **Overview** for your goal, alerts and projects.
-2. Feed snakes, clean enclosures and dial in temperature/humidity (or press **Care round**).
+1. Start in the **Room**: each tank shows its snake, and bubbles above it flag needs (tap a bubble to feed, water, clean or fix the habitat).
+2. Press **Chores** to handle routine care for everyone, and follow the quest shown in the top bar.
 3. On **Breeding**, pick a male and female to see per-egg outcome odds, then start the pairing.
-4. **Advance week** (or press `N`) — pairing → gravid → eggs → incubation → hatch.
+4. Press **Next week** (or `N`) — pairing → gravid → eggs → incubation → hatch.
 5. Keep the incubator at 88–90°F and 90–100% humidity.
 6. Keep favourites (★) and sell or trade others on the **Market**; expand on **Facility**.
 
@@ -29,7 +29,7 @@ You can also open `index.html` directly in a browser. Progress saves automatical
 | `js/sim.js` | Player actions and the weekly simulation |
 | `js/state.js` | New-game setup and save/load |
 | `js/art.js` | Original SVG snake illustrations: tapered coiled body, morph-specific patterns, shading and head detail, all generated from gene `art` data |
-| `js/ui.js`, `js/main.js` | Rendering and event wiring |
+| `js/ui.js`, `js/main.js` | Rendering (reptile room, HUD, dock, dialogs) and event wiring, including floating numbers and the weekly recap |
 
 To add a morph, append an entry to `SB.GENES` in `js/data.js` (type `codominant`, `dominant` or `recessive`, plus values and art hints).
 

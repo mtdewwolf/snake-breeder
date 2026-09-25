@@ -163,6 +163,30 @@
     return ok((delta > 0 ? 'Misted ' : 'Ventilated ') + e.name + ' — humidity now ' + e.humidity + '%.');
   };
 
+  /* One-tap fixes used by the room's care bubbles. */
+  sim.resetThermostat = function (state, encId) {
+    var e = sim.enclosure(state, encId);
+    if (!e) return fail('Enclosure not found.');
+    e.setTemp = 90; e.temp = 90;
+    return ok(e.name + ' thermostat reset — hot spot is 90°F.');
+  };
+
+  sim.resetHumidity = function (state, encId) {
+    var e = sim.enclosure(state, encId);
+    if (!e) return fail('Enclosure not found.');
+    var before = e.humidity;
+    e.humidity = 58;
+    return ok((before < 58 ? 'Misted ' : 'Ventilated ') + e.name + ' — humidity is 58%.');
+  };
+
+  sim.tuneIncubator = function (state, incId) {
+    var inc = state.incubators.find(function (i) { return i.id === incId; });
+    if (!inc) return fail('Incubator not found.');
+    inc.setTemp = 89; inc.temp = 89; inc.humidity = Math.max(inc.humidity, 95);
+    sim.markTutorial(state, 'incubate');
+    return ok(inc.name + ' dialled in: 89°F and ' + inc.humidity + '% humidity.');
+  };
+
   sim.vet = function (state, id) {
     var s = sim.snake(state, id);
     if (!s) return fail('That snake could not be found.');
