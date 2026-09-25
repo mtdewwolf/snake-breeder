@@ -6,15 +6,21 @@
   'use strict';
 
   /*
-   * Gene types:
-   *  - codominant (incomplete dominant): 1 copy is visual, 2 copies give a distinct "super" form.
-   *  - dominant: 1 or 2 copies look the same.
-   *  - recessive: needs 2 copies to be visual; 1 copy is an invisible "het" carrier.
+   * Genes. Each entry is one mutant allele (full schema in README.md, "Genetics model"):
+   *  - type codominant (incomplete dominant): 1 copy is visual, 2 copies give a distinct "super" form.
+   *  - type dominant: 1 or 2 copies look the same.
+   *  - type recessive: needs 2 copies to be visual; 1 copy is an invisible "het" carrier.
+   *  - locus: alleles sharing a locus compete for the same two slots (default: the gene's own id).
+   *  - superLethal: two copies of this allele never hatch.
+   *  - health: { issue, severity: 'mild'|'moderate'|'severe', note, forms?, sex?, fertility? }
+   *  - linkage: { to: 'sex' | locus id, rate: recombination fraction 0–0.5 }
    *
    * `art` describes how the visual form changes the placeholder illustration (see SB.NORMAL_ART).
    * `value` is the market premium for the visual form; `hetValue` is the premium
    * for a proven (100%) het carrier, scaled down for "possible het" animals.
    */
+  var BEL_ART = { set: { base: '#f7f4ec', pattern: '#f1ede3', belly: '#fdfcf8', eye: '#4d8fdc', head: '#f7f4ec', headWash: '#f1e2b8' }, style: 'plain' };
+
   SB.GENES = [
     {
       id: 'pastel', name: 'Pastel', type: 'codominant', superName: 'Super Pastel',
@@ -31,17 +37,47 @@
              super: { set: { base: '#efe3c3', pattern: '#e9d59c', belly: '#fbf6e6', spot: '#e2cf97' }, style: 'ivory' } }
     },
     {
-      id: 'mojave', name: 'Mojave', type: 'codominant', superName: 'Blue-Eyed Leucistic',
+      id: 'mojave', name: 'Mojave', type: 'codominant', locus: 'bel', superName: 'Blue-Eyed Leucistic',
       value: 70, superValue: 260,
       blurb: 'Rich chocolate tones with a pale, "keyhole" pattern. Two copies produce a white Blue-Eyed Leucistic.',
       art: { single: { set: { base: '#2a1f18', pattern: '#c2b198', spot: '#2e221a', belly: '#f3efe6' }, style: 'keyhole' },
-             super: { set: { base: '#f7f4ec', pattern: '#f1ede3', belly: '#fdfcf8', eye: '#4d8fdc', head: '#f7f4ec', headWash: '#f1e2b8' }, style: 'plain' } }
+             super: BEL_ART }
+    },
+    {
+      id: 'lesser', name: 'Lesser', type: 'codominant', locus: 'bel', superName: 'Blue-Eyed Leucistic',
+      value: 65, superValue: 250,
+      blurb: 'A BEL-complex allele: paler, milky-brown sides and a lighter pattern. Allelic with Mojave, so a snake carries at most two of them; Lesser × Mojave (or two Lessers) makes a Blue-Eyed Leucistic.',
+      art: { single: { set: { base: '#6a4a2f', belly: '#f6f1e6' }, tint: { pattern: ['lighten', 0.28] }, style: 'cleanSides' },
+             super: BEL_ART }
     },
     {
       id: 'pinstripe', name: 'Pinstripe', type: 'dominant',
       value: 55,
       blurb: 'Reduces the pattern to a fine dorsal pinstripe. One or two copies look the same, so a homozygous Pinstripe can only be proven by breeding.',
       art: { visual: { tint: { base: ['mix', '#74502c', 0.55] }, style: 'pin' } }
+    },
+    {
+      id: 'spider', name: 'Spider', type: 'dominant',
+      value: 50,
+      blurb: 'A fine, web-like reduced pattern on a lighter body. Every Spider carries a neurological "wobble" to some degree, so many keepers choose not to work with it.',
+      health: { issue: 'wobble', severity: 'moderate', note: 'Head tremors and poor coordination, from barely visible to severe. Affected snakes need calm handling and easy prey.' },
+      art: { visual: { set: { belly: '#f7f0de' }, tint: { base: ['lighten', 0.16], pattern: ['lighten', 0.22] }, style: 'pin' } }
+    },
+    {
+      id: 'champagne', name: 'Champagne', type: 'dominant', superLethal: true,
+      value: 70,
+      blurb: 'A warm tan, nearly patternless snake. Two copies are lethal: Champagne × Champagne eggs with a double dose never develop. Champagnes can also wobble.',
+      health: { issue: 'wobble', severity: 'mild', note: 'Many Champagnes show a mild neurological wobble.' },
+      art: { visual: { set: { base: '#b88c5c', pattern: '#e6cc9f', spot: '#a57a4d', belly: '#f8efdc' }, style: 'plain' } }
+    },
+    {
+      id: 'banana', name: 'Banana', type: 'codominant', superName: 'Super Banana',
+      value: 90, superValue: 300,
+      // Sex-linked: sits near the sex-determining region, so a male passes Banana mostly with his Y ("male maker") or X ("female maker").
+      linkage: { to: 'sex', rate: 0.05 },
+      blurb: 'Lavender body with bright yellow pattern (also sold as Coral Glow). Banana is linked to sex: a Banana male that got it from his father makes mostly Banana sons ("male maker"); one that got it from his mother makes mostly Banana daughters.',
+      art: { single: { tint: { base: ['mix', '#9d7a8b', 0.7], pattern: ['mix', '#ffc93a', 0.65] } },
+             super: { tint: { base: ['mix', '#d9c4cf', 0.8], pattern: ['mix', '#ffe27a', 0.8] } } }
     },
     {
       id: 'clown', name: 'Clown', type: 'recessive',
@@ -65,6 +101,50 @@
 
   SB.GENE_BY_ID = {};
   SB.GENES.forEach(function (g) { SB.GENE_BY_ID[g.id] = g; });
+
+  /*
+   * Named looks for two different alleles of one locus (a heterozygous combo).
+   * Without an entry, each allele shows its own single/visual form.
+   * Fields: pair, name, locus? (checked), id?, value?, art?, blurb?, lethal?, health?
+   */
+  SB.ALLELE_COMBOS = [
+    { locus: 'bel', pair: ['mojave', 'lesser'], name: 'Blue-Eyed Leucistic', value: 240, art: BEL_ART,
+      blurb: 'Two different BEL-complex alleles (Mojave + Lesser) also make a white, blue-eyed snake.' }
+  ];
+
+  /*
+   * Designer (trade) names for sets of visual forms, checked before the joined
+   * fallback name. `forms` maps a form id (gene id, or combo id) to a visual
+   * class ('single', 'super', 'visual', 'combo', 'any' or a list). The most
+   * specific match wins and leftover genes are appended: Pastel Spider Clown →
+   * "Bumblebee Clown". `value` is an optional extra market premium.
+   */
+  SB.COMBO_NAMES = [
+    { name: 'Bumblebee', forms: { pastel: 'single', spider: 'visual' }, value: 20 },
+    { name: 'Killer Bee', forms: { pastel: 'super', spider: 'visual' }, value: 40 },
+    { name: 'Lemon Blast', forms: { pastel: 'single', pinstripe: 'visual' }, value: 20 }
+  ];
+
+  /*
+   * Line-bred (polygenic) traits: a 0–100 score inherited as the parents'
+   * average plus random noise. At or above `threshold` the snake earns the
+   * `label` and a `value` premium. Founders roll base ± spread.
+   */
+  SB.TRAITS = [
+    { id: 'contrast', name: 'Contrast', label: 'High-contrast', base: 50, spread: 12, noise: 8, threshold: 75, value: 45,
+      blurb: 'Crisp, high-contrast pattern edges. Selected over generations: pair high-contrast parents to raise the average.' }
+  ];
+
+  /*
+   * Welfare: reputation changes for producing and selling animals with gene-linked
+   * health issues, by the worst severity involved. Kept gentle on purpose.
+   *   saleRep  — added to the usual +1 for a healthy sale
+   *   hatchRep — once per clutch that hatches affected babies
+   */
+  SB.WELFARE = {
+    saleRep: { mild: 0, moderate: -1, severe: -2 },
+    hatchRep: { mild: 0, moderate: 0, severe: -1 }
+  };
 
   /*
    * Illustration palette for a Normal ball python. Gene `art` entries modify it:
@@ -175,7 +255,7 @@
       desc: 'Two or more visual genes stacked in one snake.',
       slots: [
         { name: 'Pastel Clown', genotype: { pastel: 1, clown: 2 } },
-        { name: 'Pastel Pinstripe', genotype: { pastel: 1, pinstripe: 1 } },
+        { name: 'Lemon Blast', genotype: { pastel: 1, pinstripe: 1 } },
         { name: 'Albino Pinstripe', genotype: { pinstripe: 1, albino: 2 } },
         { name: 'Mojave Clown', genotype: { mojave: 1, clown: 2 } },
         { name: 'Albino Piebald', genotype: { albino: 2, piebald: 2 } },
@@ -193,7 +273,13 @@
     { title: 'Visual × Het (recessive)', male: { albino: 2 }, female: { albino: 1 },
       note: '50% visual Albino; every normal-looking baby is a guaranteed (100%) het.' },
     { title: 'Visual × Normal (recessive)', male: { piebald: 2 }, female: {},
-      note: 'No visual Piebalds, but every baby is 100% het Piebald — a great start for the next generation.' }
+      note: 'No visual Piebalds, but every baby is 100% het Piebald — a great start for the next generation.' },
+    { title: 'Allelic pair (BEL complex)', male: { mojave: 1 }, female: { lesser: 1 },
+      note: 'Mojave and Lesser sit at the same locus. A baby that gets one from each parent is a Blue-Eyed Leucistic.' },
+    { title: 'Lethal super', male: { champagne: 1 }, female: { champagne: 1 },
+      note: 'Two copies of Champagne never develop: about 1 egg in 4 is non-viable, and every hatchling is a single-copy Champagne or Normal.' },
+    { title: 'Sex-linked (Banana male maker)', male: { banana: ['banana', null] }, female: {},
+      note: 'This male got Banana from his father, so it rides on his Y chromosome: nearly all Banana babies are sons.' }
   ];
 
   SB.NAMES = [

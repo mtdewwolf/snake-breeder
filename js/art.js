@@ -64,14 +64,14 @@
     var look = Object.assign({}, SB.NORMAL_ART);
     var flags = {};
     var tints = [];
-    SB.GENES.forEach(function (gene) {
-      var cls = SB.genetics.visualClass(gene, genotype[gene.id] || 0);
-      if (cls === 'none' || !gene.art) return;
-      var mod = gene.art[cls] || gene.art.visual;
-      if (!mod) return;
-      if (mod.set) Object.keys(mod.set).forEach(function (k) { look[k] = mod.set[k]; });
-      if (mod.style) flags[mod.style] = true;
-      if (mod.tint) tints.push(mod.tint);
+    // Visual forms come from the genetics engine (genes, super forms and allele
+    // combos, in data order). A form's art is one modifier or a list of them.
+    SB.genetics.visualForms(genotype).forEach(function (form) {
+      [].concat(form.art || []).forEach(function (mod) {
+        if (mod.set) Object.keys(mod.set).forEach(function (k) { look[k] = mod.set[k]; });
+        if (mod.style) flags[mod.style] = true;
+        if (mod.tint) tints.push(mod.tint);
+      });
     });
     tints.forEach(function (tint) {
       Object.keys(tint).forEach(function (k) {

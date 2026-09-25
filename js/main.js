@@ -293,10 +293,13 @@
     }
     if (kind === 'move' && el.value) { var id = el.dataset.id, to = el.value; act(function () { return sim.move(state, id, to); }); }
     if (kind === 'calc') {
-      uis.calc[el.dataset.side][el.dataset.gene] = Number(el.value);
-      if (!uis.calc[el.dataset.side][el.dataset.gene]) delete uis.calc[el.dataset.side][el.dataset.gene];
+      // Values are pair keys like 'mojave/lesser' ('+' = wild type) for one locus.
+      var G = SB.genetics, sideGeno = G.norm(uis.calc[el.dataset.side]);
+      var pair = G.parsePairKey(el.value);
+      if (pair[0] || pair[1]) sideGeno[el.dataset.locus] = pair; else delete sideGeno[el.dataset.locus];
+      uis.calc[el.dataset.side] = sideGeno;
       render();
-      var again = document.querySelector('select[data-change="calc"][data-side="' + el.dataset.side + '"][data-gene="' + el.dataset.gene + '"]');
+      var again = document.querySelector('select[data-change="calc"][data-side="' + el.dataset.side + '"][data-locus="' + el.dataset.locus + '"]');
       if (again) again.focus({ preventScroll: true });
     }
   });

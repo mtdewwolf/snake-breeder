@@ -5,8 +5,8 @@
   'use strict';
 
   var U = SB.util, G = SB.genetics;
-  var SAVE_KEY = 'scale-and-nasl-save-v1';
-  var VERSION = 1;
+  var SAVE_KEY = 'scale-and-nasl-save-v1'; // key kept so older saves are found and migrated
+  var VERSION = 2;
 
   var S = {};
 
@@ -35,9 +35,11 @@
   /*
    * Build a snake. `opts.knowledge` may be supplied for animals whose genetics
    * are not fully proven; otherwise the keeper knows the exact genotype.
+   * Genotype and knowledge may be given in shorthand (see genetics.js); they are
+   * stored in canonical form.
    */
   S.makeSnake = function (state, opts) {
-    var genotype = opts.genotype || {};
+    var genotype = G.norm(opts.genotype || {});
     return {
       id: S.nextId(state, 'sn'),
       name: opts.name || S.uniqueName(state),
@@ -45,7 +47,8 @@
       ageWeeks: opts.ageWeeks || 0,
       weight: opts.weight || 70,
       genotype: genotype,
-      knowledge: opts.knowledge || G.exactKnowledge(genotype),
+      knowledge: opts.knowledge ? G.normKnowledge(opts.knowledge) : G.exactKnowledge(genotype),
+      traits: opts.traits || G.randomTraits(U.rand),
       health: opts.health != null ? opts.health : 90,
       stress: opts.stress != null ? opts.stress : 15,
       hunger: opts.hunger != null ? opts.hunger : 20,
@@ -132,13 +135,69 @@
     }
   };
 
+  /* ---------- Save migration ---------- */
+
+  function migrateSnake(s) {
+    if (!s) return;
+    s.genotype = G.norm(s.genotype || {});
+    s.knowledge = s.knowledge ? G.normKnowledge(s.knowledge) : G.exactKnowledge(s.genotype);
+  }
+
+  function migrateSnapshot(snap) {
+    if (!snap) return;
+    snap.genotype = G.norm(snap.genotype || {});
+    if (snap.knowledge) snap.knowledge = G.normKnowledge(snap.knowledge);
+  }
+
+  /*
+   * Bring an older save up to VERSION. v1 stored genotypes as { geneId: copies }
+   * and knowledge as { geneId: [p0, p1, p2] }; both convert losslessly (every v1
+   * gene was its own single-allele locus). Traits did not exist, so v1 snakes read
+   * the trait's base score. Returns the state, or null if it can't be migrated.
+   */
+  S.migrate = function (state) {
+    if (!state || !Array.isArray(state.snakes) || !(state.version >= 1) || state.version > VERSION) return null;
+    if (state.version < 2) {
+      state.snakes.forEach(migrateSnake);
+      var mk = state.market || {};
+      (mk.listings || []).forEach(function (l) { migrateSnake(l.snake); });
+      (mk.trades || []).forEach(function (t) { migrateSnake(t.snake); });
+      (state.projects || []).forEach(function (p) {
+        migrateSnapshot(p.maleSnapshot);
+        migrateSnapshot(p.femaleSnapshot);
+        (p.eggs || []).forEach(function (e) { e.genotype = G.norm(e.genotype || {}); });
+      });
+      (state.discoveries || []).forEach(function (d) { if (d.genotype) d.genotype = G.norm(d.genotype); });
+      state.version = 2;
+    }
+    S.relabelDiscoveries(state);
+    return state;
+  };
+
+  /*
+   * Discovery labels follow the current naming data (e.g. a new designer name in
+   * SB.COMBO_NAMES), so Morph Book slots keep matching. Duplicates merge, keeping the first.
+   */
+  S.relabelDiscoveries = function (state) {
+    var seen = {};
+    state.discoveries = (state.discoveries || []).filter(function (d) {
+      if (d.genotype) {
+        d.label = G.morphLabel(d.genotype);
+        d.genes = G.visualGenes(d.genotype);
+      }
+      if (seen[d.label]) return false;
+      seen[d.label] = true;
+      return true;
+    });
+  };
+
   S.load = function () {
     var raw;
     try { raw = localStorage.getItem(SAVE_KEY); } catch (e) { return { state: null, error: 'Local storage is unavailable, so progress cannot be saved in this browser.' }; }
     if (!raw) return { state: null };
     try {
-      var state = JSON.parse(raw);
-      if (!state || state.version !== VERSION || !Array.isArray(state.snakes)) {
+      var state = S.migrate(JSON.parse(raw));
+      if (!state) {
         return { state: null, error: 'Your save was from an incompatible version, so a new game was started.' };
       }
       return { state: state };
