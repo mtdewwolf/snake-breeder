@@ -78,7 +78,7 @@ a { color: var(--moss-2); }
 .topbar .btn-ghost:hover { background: rgba(255, 255, 255, .1); }
 
 /* ---------- Tabs ---------- */
-.tabs { background: var(--paper); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 8px rgba(60, 40, 10, .06); }
+.tabs { background: var(--paper); border-bottom: 1px solid var(--line); position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; box-shadow: 0 2px 8px rgba(60, 40, 10, .06); }
 .tabs-inner { display: flex; gap: .25rem; overflow-x: auto; padding: .4rem clamp(16px, 3vw, 32px); scrollbar-width: thin; }
 .tab { flex: none; border: 0; background: transparent; font: inherit; color: var(--muted); padding: .5rem .8rem; border-radius: 10px; cursor: pointer; font-weight: 700; display: flex; align-items: center; gap: .35rem; }
 .tab:hover { background: var(--sand); color: var(--ink); }
