@@ -46,7 +46,7 @@
 
   function persist() {
     if (!SB.state.save(state)) notice('Progress could not be saved in this browser (storage may be full or disabled).');
-    try { localStorage.setItem(UI_KEY, JSON.stringify({ view: uis.view, filter: uis.filter, sort: uis.sort })); } catch (e) { /* optional */ }
+    try { localStorage.setItem(UI_KEY, JSON.stringify({ view: uis.view, filter: uis.filter, sort: uis.sort, query: uis.query || '' })); } catch (e) { /* optional */ }
   }
 
   /* Floating "+$50" style numbers rising from where the player tapped. */
@@ -258,7 +258,8 @@
     'vet': function (el) { act(function () { return sim.vet(state, el.dataset.id); }); },
     'keeper': function (el) { act(function () { return sim.toggleKeeper(state, el.dataset.id); }); },
     'sell': function (el) { sellFlow(el.dataset.id); },
-    'filter': function (el) { uis.filter = el.dataset.filter; persist(); render(); },
+    'filter': function (el) { uis.filter = el.dataset.filter; uis.query = ''; persist(); render(); },
+    'clear-collection-filters': function () { uis.filter = 'all'; uis.query = ''; uis.sort = 'name'; persist(); render(); },
     'dismiss-tutorial': function () { state.tutorial.dismissed = true; persist(); render(); toast('Tips hidden. You can find the full guide in the Journal.'); },
     'dismiss-notice': function () { notice(null); },
     'start-pairing': function () {
@@ -364,6 +365,14 @@
     var kind = el.dataset && el.dataset.change;
     if (!kind) return;
     if (kind === 'sort') { uis.sort = el.value; persist(); render(); }
+    if (kind === 'collection-filter') { uis.filter = el.value; persist(); render(); }
+    if (kind === 'collection-search') {
+      var cursor = el.selectionStart;
+      uis.query = el.value;
+      persist(); render();
+      var search = document.querySelector('[data-change="collection-search"]');
+      if (search) { search.focus({ preventScroll: true }); search.setSelectionRange(cursor, cursor); }
+    }
     if (kind === 'pick') {
       if (el.dataset.sex === 'M') uis.male = el.value; else uis.female = el.value;
       if (uis.male && uis.female) { sim.markTutorial(state, 'preview'); persist(); }
@@ -429,7 +438,7 @@
     }
     try {
       var saved = JSON.parse(localStorage.getItem(UI_KEY) || 'null');
-      if (saved) { uis.view = saved.view || uis.view; uis.filter = saved.filter || uis.filter; uis.sort = saved.sort || uis.sort; }
+      if (saved) { uis.view = saved.view || uis.view; uis.filter = saved.filter || uis.filter; uis.sort = saved.sort || uis.sort; uis.query = saved.query || ''; }
     } catch (e) { /* optional */ }
     sim.checkGoals(state);
     persist();
