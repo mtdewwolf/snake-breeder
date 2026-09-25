@@ -57,6 +57,9 @@
     }, 0);
   };
 
+  // Reputation tops out here; sale prices already stop rising at 100.
+  sim.REP_CAP = 200;
+
   sim.priceMultiplier = function (state) { return 1 + U.clamp(state.reputation, 0, 100) / 100; };
 
   /* Market value, based on what can be proven about the snake (knowledge), not hidden truth. */
@@ -649,14 +652,19 @@
     return { id: SB.state.nextId(state, 'ls'), seller: U.pick(SB.BUYERS), snake: snake, price: Math.round(sim.value(state, snake) * 1.15 / 5) * 5 };
   }
 
-  /* A proven adult from the Breeder's catalogue, favouring genes the collection lacks. */
+  /*
+   * A proven adult from the Breeder's catalogue. Favours genes the collection
+   * lacks, and a second carrier of an incomplete-dominant gene when the keeper
+   * owns just one (a super form needs two unrelated carriers).
+   */
   function makeCatalogOffer(state, taken) {
     var have = {};
-    state.snakes.forEach(function (x) { G.activeLoci(G.norm(x.genotype)).forEach(function (L) { have[L] = true; }); });
+    state.snakes.forEach(function (x) { G.activeLoci(G.norm(x.genotype)).forEach(function (L) { have[L] = (have[L] || 0) + 1; }); });
     var pool = SB.CATALOG.map(function (c) {
-      var loci = Object.keys(G.norm(c.genotype));
+      var geno = G.norm(c.genotype), loci = Object.keys(geno);
       var fresh = loci.some(function (L) { return !have[L]; });
-      return { c: c, w: (c.weight || 1) * (fresh ? 3 : 1) * (taken[JSON.stringify(c.genotype)] ? 0 : 1) };
+      var pairUp = loci.some(function (L) { return have[L] === 1 && geno[L].some(function (a) { return a && G.gene(a).type === 'codominant'; }); });
+      return { c: c, w: (c.weight || 1) * (fresh || pairUp ? 3 : 1) * (taken[JSON.stringify(c.genotype)] ? 0 : 1) };
     }).filter(function (x) { return x.w > 0; });
     var total = pool.reduce(function (t, x) { return t + x.w; }, 0), r = U.rand() * total, pick = pool[0];
     for (var i = 0; i < pool.length; i++) { r -= pool[i].w; if (r < 0) { pick = pool[i]; break; } }
@@ -667,7 +675,7 @@
       weight: sex === 'F' ? U.randInt(1600, 2000) : U.randInt(800, 1150),
       health: U.randInt(92, 100), stress: U.randInt(10, 20), hunger: 20, origin: 'Bought', mealsEaten: 20
     });
-    return { id: SB.state.nextId(state, 'ct'), seller: U.pick(['Tomas (morph collector)', 'Mei (breeder, two towns over)', 'The Coil Club']), snake: snake, price: Math.round(sim.value(state, snake) * 1.6 / 5) * 5, catalog: true };
+    return { id: SB.state.nextId(state, 'ct'), seller: U.pick(['Tomas (morph collector)', 'Mei (breeder, two towns over)', 'The Coil Club']), snake: snake, price: Math.round(sim.value(state, snake) / sim.priceMultiplier(state) * 1.6 / 5) * 5, catalog: true };
   }
 
   function restockCatalog(state) {
@@ -869,7 +877,9 @@
       messages.push(msg);
       goal = sim.currentGoal(state);
     }
-    return messages.concat(sim.checkBook(state));
+    messages = messages.concat(sim.checkBook(state));
+    state.reputation = Math.min(sim.REP_CAP, state.reputation);
+    return messages;
   };
 
   /* ---------- Weekly turn ---------- */
@@ -1026,7 +1036,7 @@
     else { state.money = 0; events.push({ text: 'You couldn’t fully cover this week’s electricity (' + U.money(upkeep) + '). Sell a snake to stay afloat.', kind: 'bad' }); }
 
     var displays = Number(state.upgrades.display || 0);
-    if (displays && w % 4 === 0) {
+    if (displays && w % 4 === 0 && state.reputation < sim.REP_CAP) {
       state.reputation += displays;
       events.push({ text: 'Visitors admired your display vivarium' + (displays > 1 ? 's' : '') + ' (+' + displays + ' reputation).', kind: 'good' });
     }

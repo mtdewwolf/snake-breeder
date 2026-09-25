@@ -187,3 +187,32 @@ test('names come back round instead of running out', () => {
   const n = SB.state.uniqueName(state);
   assert.ok(!/\d/.test(n), 'still a plain name after 400 hatchlings: ' + n);
 });
+
+test('reputation caps at 200 and catalogue prices ignore it', () => {
+  const state = SB.state.newGame();
+  state.reputation = 500;
+  sim.checkGoals(state);
+  assert.strictEqual(state.reputation, sim.REP_CAP);
+  const l = state.market.catalog[0];
+  const snake = l.snake;
+  state.reputation = 0;
+  const low = Math.round(sim.value(state, snake) / sim.priceMultiplier(state) * 1.6 / 5) * 5;
+  state.reputation = 100;
+  const high = Math.round(sim.value(state, snake) / sim.priceMultiplier(state) * 1.6 / 5) * 5;
+  assert.ok(Math.abs(low - high) <= 5, 'catalogue price does not scale with reputation');
+});
+
+test('catalogue leans toward a second carrier for super forms', () => {
+  const orig = G.rng;
+  G.rng = seeded(7);
+  try {
+    let pastel = 0, runs = 300;
+    for (let i = 0; i < runs; i++) {
+      const state = SB.state.newGame(); // Biscuit is the only Pastel
+      state.week = 8;
+      sim.refreshMarket(state, false);
+      if (state.market.catalog.some((l) => G.copies(l.snake.genotype, 'pastel') > 0)) pastel++;
+    }
+    assert.ok(pastel / runs > 0.2, 'a Pastel partner shows up often: ' + pastel + '/' + runs);
+  } finally { G.rng = orig; }
+});

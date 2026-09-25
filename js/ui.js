@@ -142,7 +142,7 @@
   ui.renderTop = function (state) {
     var cap = state.enclosures.length, used = state.snakes.filter(function (s) { return s.enclosureId; }).length;
     return res('coin', COIN, U.money(state.money), 'Funds', Math.round(state.money)) +
-      res('rep', '★', String(state.reputation), 'Reputation', state.reputation) +
+      res('rep', '★', String(state.reputation), 'Reputation (max ' + sim.REP_CAP + ')', state.reputation) +
       res('week', '📅', 'Wk ' + state.week, 'Week') +
       res('house', '🏠', used + '/' + cap, 'Enclosures in use');
   };
