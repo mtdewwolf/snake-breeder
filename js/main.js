@@ -231,7 +231,9 @@
       var go = dialog.querySelector('.recap .btn-primary');
       if (go) go.focus();
     } else {
-      toast('Week ' + report.week + ' — a quiet week in the reptile room.', 'good', 'quiet-week');
+      var todo = ui.needCount(state);
+      if (todo) toast('Week ' + report.week + ' — ' + todo + ' thing' + (todo === 1 ? ' needs' : 's need') + ' attention in the room. Try Chores.', 'warn', 'quiet-week');
+      else toast('Week ' + report.week + ' — a quiet week in the reptile room.', 'good', 'quiet-week');
     }
   }
 

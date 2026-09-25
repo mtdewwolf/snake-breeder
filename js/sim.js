@@ -232,7 +232,7 @@
 
   /* Routine chores for everyone: feed hungry snakes, fresh water, clean dirty enclosures. */
   sim.careRound = function (state) {
-    var fed = 0, refused = [], cleaned = 0, watered = 0, spent = 0, startMoney = state.money, broke = false;
+    var fed = 0, refused = [], cleaned = 0, watered = 0, misted = 0, heated = 0, tuned = 0, spent = 0, startMoney = state.money, broke = false;
     state.snakes.forEach(function (s) {
       if (s.hunger < 35) return;
       if (state.money < sim.feedCost(s)) { broke = true; return; }
@@ -242,17 +242,28 @@
     state.enclosures.forEach(function (e) {
       if (!sim.occupant(state, e)) return;
       if (e.water < 95) { e.water = 100; watered++; }
+      // Habitat fixes are free, so they run even when money is short.
+      if (e.humidity < CARE.humidity.ideal[0] || e.humidity > CARE.humidity.ideal[1]) { sim.resetHumidity(state, e.id); misted++; }
+      if (e.temp < CARE.temp.ideal[0] || e.temp > CARE.temp.ideal[1]) { sim.resetThermostat(state, e.id); heated++; }
       if (e.clean < 75) {
         if (state.money < C.cleanEnclosure) { broke = true; return; }
         sim.clean(state, e.id, true); cleaned++;
       }
     });
+    sim.activeProjects(state).forEach(function (p) {
+      var inc = state.incubators.find(function (i) { return i.id === p.incubatorId; });
+      if (!inc) return;
+      if (inc.temp < CARE.incubTemp.ideal[0] || inc.temp > CARE.incubTemp.ideal[1] || inc.humidity < CARE.incubHumidity.ideal[0]) { sim.tuneIncubator(state, inc.id); tuned++; }
+    });
     spent = startMoney - state.money;
-    if (!fed && !cleaned && !watered) return fail('Nothing needed doing — everyone is fed, watered and clean' + (refused.length ? ' (refused food: ' + refused.join(', ') + ')' : '') + '.');
+    if (!fed && !cleaned && !watered && !misted && !heated && !tuned) return fail('Nothing needed doing — everyone is fed, watered and clean' + (refused.length ? ' (refused food: ' + refused.join(', ') + ')' : '') + '.');
     var parts = [];
     if (fed) parts.push('fed ' + fed);
     if (watered) parts.push('fresh water ×' + watered);
     if (cleaned) parts.push('cleaned ' + cleaned);
+    if (misted) parts.push('humidity fixed ×' + misted);
+    if (heated) parts.push('thermostat reset ×' + heated);
+    if (tuned) parts.push('incubator dialled in ×' + tuned);
     var msg = 'Care round: ' + parts.join(', ') + ' (' + U.money(spent) + ').';
     if (refused.length) msg += ' Refused food: ' + refused.join(', ') + '.';
     if (broke) msg += ' Some chores were skipped — not enough money.';

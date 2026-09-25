@@ -220,16 +220,21 @@
     var out = [];
     if (sim.isUnrevealed(state, s)) return out;
     if (s.health < 60) out.push({ icon: '🩺', action: 'vet', id: s.id, urgent: s.health < 40, label: 'Vet visit for ' + s.name + ' (' + U.money(SB.COSTS.vet) + ')' });
+    if (e) {
+      // Habitat comes before routine care: only 4 bubbles fit on a tank, and
+      // routine care is what Chores already covers.
+      var t = U.rate(e.temp, CARE.temp), h = U.rate(e.humidity, CARE.humidity);
+      if (t.level !== 'good') out.push({ icon: '🌡️', action: 'fix-temp', id: e.id, urgent: t.level === 'bad', label: e.name + ' is ' + t.text.toLowerCase() + ' (' + e.temp + '°F). Reset the thermostat to 90°F' });
+      if (h.level !== 'good') out.push({ icon: e.humidity < CARE.humidity.ideal[0] ? '💦' : '🌬️', action: 'fix-hum', id: e.id, urgent: h.level === 'bad', label: (e.humidity < CARE.humidity.ideal[0] ? 'Mist ' : 'Ventilate ') + e.name + ' (humidity ' + e.humidity + '%)' });
+    }
     if (s.hunger >= 35) out.push({ icon: '🐭', action: 'feed', id: s.id, urgent: s.hunger > 80, label: 'Feed ' + s.name + ' (' + U.money(sim.feedCost(s)) + ')' });
     if (e) {
       if (e.water < 70) out.push({ icon: '💧', action: 'water', id: e.id, urgent: e.water < 40, label: 'Fresh water for ' + s.name });
       if (e.clean < 70) out.push({ icon: '🧽', action: 'clean', id: e.id, urgent: e.clean < 40, label: 'Clean ' + e.name + ' (' + U.money(SB.COSTS.cleanEnclosure) + ')' });
-      var t = U.rate(e.temp, CARE.temp), h = U.rate(e.humidity, CARE.humidity);
-      if (t.level !== 'good') out.push({ icon: '🌡️', action: 'fix-temp', id: e.id, urgent: t.level === 'bad', label: e.name + ' is ' + t.text.toLowerCase() + ' (' + e.temp + '°F). Reset the thermostat to 90°F' });
-      if (h.level !== 'good') out.push({ icon: e.humidity < CARE.humidity.ideal[0] ? '💦' : '🌬️', action: 'fix-hum', id: e.id, urgent: h.level === 'bad', label: (e.humidity < CARE.humidity.ideal[0] ? 'Mist ' : 'Ventilate ') + e.name + ' (humidity ' + e.humidity + '%)' });
       if (e.kind === 'tub' && s.weight > T.tubMaxWeight) out.push({ icon: '📦', action: 'open-snake', id: s.id, urgent: false, label: s.name + ' has outgrown this tub. Move to a bigger enclosure' });
     }
-    return out;
+    // Urgent needs first (stable), so the most pressing ones survive the cap.
+    return out.filter(function (n) { return n.urgent; }).concat(out.filter(function (n) { return !n.urgent; }));
   };
 
   ui.needCount = function (state) {

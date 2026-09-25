@@ -121,3 +121,16 @@ test('collection dashboard, search filters, and snake records show useful collec
   assert.doesNotMatch(femaleFilter, /Secret hatchling/);
   assert.match(ui.collection(state, { filter: 'all', sort: 'name' }), /Eggs to reveal/);
 });
+
+test('care round fixes drifting habitat and puts habitat needs on the tank', () => {
+  const state = SB.state.newGame();
+  const s = state.snakes[0], e = sim.enclosureOf(state, s);
+  s.hunger = 60; e.water = 50; e.clean = 50; e.humidity = 25; e.temp = 84;
+  const needs = ui.needs(state, s, e).slice(0, 4).map((n) => n.action);
+  assert.ok(needs.includes('fix-hum'), 'humidity bubble survives the 4-bubble cap');
+  assert.ok(needs.includes('fix-temp'), 'temperature bubble survives the 4-bubble cap');
+  const r = sim.careRound(state);
+  assert.ok(r.ok, r.msg);
+  assert.ok(e.humidity >= SB.CARE.humidity.ideal[0] && e.humidity <= SB.CARE.humidity.ideal[1], 'humidity back in range');
+  assert.strictEqual(e.temp, 90);
+});
