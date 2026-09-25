@@ -208,7 +208,7 @@ select, input { font: inherit; padding: .4rem .5rem; border: 1px solid var(--lin
 .snake-card-btn { all: unset; display: block; width: 100%; cursor: pointer; box-sizing: border-box; }
 .snake-card-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: -3px; border-radius: var(--radius); }
 .portrait { background: var(--sand-2); }
-.portrait svg { display: block; width: 100%; height: auto; max-height: 190px; }
+.portrait svg { display: block; width: 100%; height: 200px; }
 .snake-card-body { padding: .7rem .9rem .9rem; }
 .snake-card-body h3 { margin: 0 0 .15rem; font-size: 1.15rem; }
 .snake-meta { font-size: .85rem; color: var(--muted); margin: 0; }
@@ -227,7 +227,7 @@ dialog::backdrop { background: rgba(35, 28, 15, .55); }
 .detail-main section { border-bottom: 1px solid var(--line); padding-bottom: .8rem; margin-bottom: .8rem; }
 .detail-main section:last-child { border-bottom: 0; }
 .portrait-lg { border-radius: 14px; overflow: hidden; }
-.portrait-lg svg { max-height: none; }
+.portrait-lg svg { height: auto; aspect-ratio: 200 / 180; }
 .facts { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem .8rem; margin: .8rem 0; }
 .facts div { background: var(--sand); border-radius: 8px; padding: .35rem .55rem; }
 .facts dt { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
@@ -380,3 +380,13 @@ dialog::backdrop { background: rgba(35, 28, 15, .55); }
 .listing > div { flex: 1 1 auto; min-width: 0; }
 .inline-form select { width: 100%; text-overflow: ellipsis; }
 .portrait { display: flex; justify-content: center; background: linear-gradient(180deg, #efe3c8, #e2d0a8); }
+
+/* Curious snakes occasionally flick their tongue. */
+.sn-tongue { transform-box: fill-box; transform-origin: 0 50%; animation: tongue-flick 5s ease-in-out infinite; }
+@keyframes tongue-flick {
+  0%, 78%, 100% { transform: scaleX(0); }
+  82%, 86% { transform: scaleX(1); }
+  84% { transform: scaleX(.75); }
+}
+.baby .pick-art, .baby .pick-art svg { width: 110px; }
+.baby .pick-art svg { border-radius: 10px; }

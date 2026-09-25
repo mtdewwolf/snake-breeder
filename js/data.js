@@ -11,7 +11,7 @@
    *  - dominant: 1 or 2 copies look the same.
    *  - recessive: needs 2 copies to be visual; 1 copy is an invisible "het" carrier.
    *
-   * `art` describes how the visual form changes the placeholder illustration.
+   * `art` describes how the visual form changes the placeholder illustration (see SB.NORMAL_ART).
    * `value` is the market premium for the visual form; `hetValue` is the premium
    * for a proven (100%) het carrier, scaled down for "possible het" animals.
    */
@@ -20,40 +20,40 @@
       id: 'pastel', name: 'Pastel', type: 'codominant', superName: 'Super Pastel',
       value: 60, superValue: 170,
       blurb: 'Brightens yellows and fades the dark pattern edges. Two copies make a Super Pastel.',
-      art: { single: { base: '#5b4322', pattern: '#e9c34b', belly: '#f6ecd0' },
-             super: { base: '#8c6b2f', pattern: '#f6dc6e', belly: '#fbf4dc' } }
+      art: { single: { set: { edge: '#f5df8e' }, tint: { base: ['lighten', 0.2], pattern: ['mix', '#ffd84a', 0.55] } },
+             super: { set: { edge: '#fbefc0', belly: '#fbf4dc' }, tint: { base: ['lighten', 0.42], pattern: ['mix', '#ffe36b', 0.8] } } }
     },
     {
       id: 'yellowbelly', name: 'Yellow Belly', type: 'codominant', superName: 'Ivory',
       value: 45, superValue: 190,
       blurb: 'A subtle gene with clean, yellow-edged bellies. Two copies make the pale Ivory.',
-      art: { single: { belly: '#f3dd79', pattern: '#c89a4a' },
-             super: { base: '#efe4c6', pattern: '#e3d09c', belly: '#fbf6e6', style: 'stripe' } }
+      art: { single: { set: { belly: '#f1d56a' }, tint: { pattern: ['mix', '#d9a94f', 0.35] }, style: 'cleanSides' },
+             super: { set: { base: '#efe3c3', pattern: '#e9d59c', belly: '#fbf6e6', spot: '#e2cf97' }, style: 'ivory' } }
     },
     {
       id: 'mojave', name: 'Mojave', type: 'codominant', superName: 'Blue-Eyed Leucistic',
       value: 70, superValue: 260,
       blurb: 'Rich chocolate tones with a pale, "keyhole" pattern. Two copies produce a white Blue-Eyed Leucistic.',
-      art: { single: { base: '#2f231b', pattern: '#a8977f', belly: '#efe9dd' },
-             super: { base: '#f5f2ea', pattern: '#ece6da', belly: '#fbfaf6', eye: '#4d8fdc', style: 'plain' } }
+      art: { single: { set: { base: '#2a1f18', pattern: '#c2b198', spot: '#2e221a', belly: '#f3efe6' }, style: 'keyhole' },
+             super: { set: { base: '#f7f4ec', pattern: '#f1ede3', belly: '#fdfcf8', eye: '#4d8fdc', head: '#f7f4ec', headWash: '#f1e2b8' }, style: 'plain' } }
     },
     {
       id: 'pinstripe', name: 'Pinstripe', type: 'dominant',
       value: 55,
       blurb: 'Reduces the pattern to a fine dorsal pinstripe. One or two copies look the same, so a homozygous Pinstripe can only be proven by breeding.',
-      art: { visual: { style: 'pin', pattern: '#c8a466' } }
+      art: { visual: { tint: { base: ['mix', '#74502c', 0.55] }, style: 'pin' } }
     },
     {
       id: 'clown', name: 'Clown', type: 'recessive',
       value: 380, hetValue: 55,
       blurb: 'A striking recessive: a bold dorsal stripe and a clean, "clown-faced" head. Hets look normal but carry it.',
-      art: { visual: { style: 'clown', base: '#c98a38', pattern: '#3a2616', belly: '#f7ecd4' } }
+      art: { visual: { style: 'clown' } }
     },
     {
       id: 'albino', name: 'Albino', type: 'recessive',
       value: 300, hetValue: 45,
       blurb: 'No black pigment: white and bright yellow with pink-red eyes. Hets look normal.',
-      art: { visual: { base: '#fbf1d8', pattern: '#f2b53e', belly: '#fffaf0', eye: '#d6404d' } }
+      art: { visual: { set: { base: '#fbf1dc', pattern: '#f3b73f', spot: '#f6e2b4', belly: '#fffaf0', eye: '#d23b48', edge: null } } }
     },
     {
       id: 'piebald', name: 'Piebald', type: 'recessive',
@@ -66,7 +66,13 @@
   SB.GENE_BY_ID = {};
   SB.GENES.forEach(function (g) { SB.GENE_BY_ID[g.id] = g; });
 
-  SB.NORMAL_ART = { base: '#3b2a1c', pattern: '#b88741', belly: '#efe3c8', eye: '#1c140d', style: 'normal' };
+  /*
+   * Illustration palette for a Normal ball python. Gene `art` entries modify it:
+   *   set:   colour overrides (applied in gene order)
+   *   tint:  relative colour changes applied afterwards, so combos stack (e.g. Pastel Clown)
+   *   style: pattern style flag (pin, clown, pied, keyhole, plain, ivory, cleanSides)
+   */
+  SB.NORMAL_ART = { base: '#2b1e14', pattern: '#b98a45', belly: '#efe6d2', eye: '#1a120b', spot: null, edge: null, head: null, headWash: null };
 
   /* Care targets. Ranges are [ideal low, ideal high] and [acceptable low, acceptable high]. */
   SB.CARE = {

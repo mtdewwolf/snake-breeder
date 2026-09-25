@@ -28,7 +28,7 @@ You can also open `index.html` directly in a browser. Progress saves automatical
 | `js/genetics.js` | Mendelian engine: predictions, egg rolls, possible-het inference |
 | `js/sim.js` | Player actions and the weekly simulation |
 | `js/state.js` | New-game setup and save/load |
-| `js/art.js` | Original SVG placeholder snake illustrations generated from genes |
+| `js/art.js` | Original SVG snake illustrations: tapered coiled body, morph-specific patterns, shading and head detail, all generated from gene `art` data |
 | `js/ui.js`, `js/main.js` | Rendering and event wiring |
 
 To add a morph, append an entry to `SB.GENES` in `js/data.js` (type `codominant`, `dominant` or `recessive`, plus values and art hints).
