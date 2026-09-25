@@ -6,37 +6,47 @@
   <title>Scale &amp; نسل — Ball Python Breeder</title>
   <meta name="description" content="A cozy ball python care, genetics and breeding game.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%234f6b3a'/%3E%3Cpath d='M8 20c0-6 5-10 10-9s6 6 2 8-7-1-5-4' stroke='%23e9c34b' stroke-width='3.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;700;800;900&display=swap">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to game</a>
-  <header class="topbar">
-    <div class="brand">
-      <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
-        <circle cx="24" cy="24" r="22" fill="#4f6b3a"/>
-        <path d="M11 30c0-9 8-15 15-13s9 9 3 12-10-1-7-6" stroke="#e9c34b" stroke-width="5" fill="none" stroke-linecap="round"/>
-        <circle cx="21.5" cy="23" r="1.4" fill="#2f2418"/>
-      </svg>
-      <div>
+  <header class="hud">
+    <div class="hud-inner">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
+          <circle cx="24" cy="24" r="22" fill="#4f7d33"/>
+          <path d="M11 30c0-9 8-15 15-13s9 9 3 12-10-1-7-6" stroke="#f2b632" stroke-width="5" fill="none" stroke-linecap="round"/>
+          <circle cx="21.5" cy="23" r="1.4" fill="#2f2418"/>
+        </svg>
         <h1 class="brand-title">Scale &amp; <span lang="fa" dir="rtl">نسل</span></h1>
-        <p class="brand-sub">Ball Python Breeder</p>
       </div>
-    </div>
-    <div class="top-stats" id="top-stats" aria-live="polite"></div>
-    <div class="top-actions">
-      <button type="button" class="btn btn-ghost" data-action="care-round" title="Feed hungry snakes, refresh water and clean dirty enclosures">🧺 Care round</button>
-      <button type="button" class="btn btn-primary" data-action="advance" title="Advance time by one week">Advance week ▸</button>
+      <div class="hud-stats" id="top-stats" aria-live="polite"></div>
+      <div class="hud-quest" id="quest"></div>
     </div>
   </header>
 
-  <nav class="tabs" aria-label="Game sections">
-    <div class="tabs-inner" id="tabs"></div>
+  <nav class="dock" aria-label="Game sections">
+    <div class="dock-inner" id="tabs"></div>
   </nav>
 
   <main id="main" tabindex="-1">
     <div id="notice" class="notice" hidden></div>
     <div id="view"></div>
   </main>
+
+  <div class="fabs">
+    <button type="button" class="fab fab-chores" data-action="care-round" aria-label="Do all chores: feed hungry snakes, refresh water and clean dirty enclosures">
+      <span class="fab-icon" aria-hidden="true">🧺</span><span class="fab-label">Chores</span>
+    </button>
+    <button type="button" class="fab fab-next" data-action="advance" aria-label="Next week (N)">
+      <span class="fab-icon" aria-hidden="true">▶▶</span><span class="fab-label">Next week</span>
+    </button>
+  </div>
+
+  <div id="floaters" class="floaters" aria-hidden="true"></div>
 
   <footer class="footer">
     <p>Scale &amp; <span lang="fa" dir="rtl">نسل</span> · a simplified genetics game. Illustrations are original placeholders, not photos of real animals. Progress saves automatically in this browser.</p>
