@@ -6,7 +6,7 @@
   'use strict';
 
   var sim = SB.sim, ui = SB.ui, U = SB.util;
-  var UI_KEY = 'scale-and-nasl-ui';
+  var UI_KEY = 'scale-and-nasl-ui'; // pre-rename key, kept so UI prefs survive
   var state;
   var uis = {
     view: 'overview', filter: 'all', sort: 'name', male: null, female: null, journalTab: 'guide',
@@ -26,14 +26,20 @@
 
   /* ---------- Feedback ---------- */
 
-  function toast(msg, level) {
+  // A toast with a key replaces any visible toast with the same key, so rapid
+  // repeats (e.g. skipping several quiet weeks) update in place instead of piling up.
+  function toast(msg, level, key) {
     var box = $('toasts');
     var el = document.createElement('div');
     level = level || 'good';
     el.className = 'toast toast-' + level;
+    if (key) {
+      el.dataset.key = key;
+      Array.prototype.forEach.call(box.querySelectorAll('[data-key="' + key + '"]'), function (old) { old.remove(); });
+    }
     el.innerHTML = '<span aria-hidden="true" class="toast-icon">' + (U.ICON[level] || '•') + '</span><span>' + U.esc(msg) + '</span>';
     box.appendChild(el);
-    while (box.children.length > 4) box.removeChild(box.firstChild);
+    while (box.children.length > 3) box.removeChild(box.firstChild);
     setTimeout(function () { el.classList.add('is-leaving'); setTimeout(function () { el.remove(); }, 400); }, level === 'bad' ? 7000 : 4500);
   }
 
@@ -225,7 +231,7 @@
       var go = dialog.querySelector('.recap .btn-primary');
       if (go) go.focus();
     } else {
-      toast('Week ' + report.week + ' — a quiet week in the reptile room.', 'good');
+      toast('Week ' + report.week + ' — a quiet week in the reptile room.', 'good', 'quiet-week');
     }
   }
 

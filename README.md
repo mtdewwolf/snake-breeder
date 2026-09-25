@@ -1,4 +1,4 @@
-# Scale & نسل — Ball Python Breeder
+# Clutch & Coil — Ball Python Breeder
 
 A cozy, turn-based browser game about running a small ball python breeding operation: care for your snakes, learn their genetics, preview pairings, incubate clutches, hatch babies with inherited traits, and find them good homes.
 

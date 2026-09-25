@@ -5,7 +5,7 @@
   'use strict';
 
   var U = SB.util, G = SB.genetics;
-  var SAVE_KEY = 'scale-and-nasl-save-v1'; // key kept so older saves are found and migrated
+  var SAVE_KEY = 'scale-and-nasl-save-v1'; // key predates the rename; kept so older saves are found and migrated
   var VERSION = 2;
 
   var S = {};
@@ -122,7 +122,7 @@
     state.enclosures[3].water = 35;
 
     SB.sim.refreshMarket(state, true);
-    SB.sim.log(state, 'Welcome to Scale & نسل! Your small ball python operation opens its doors.', 'good');
+    SB.sim.log(state, 'Welcome to Clutch & Coil! Your small ball python operation opens its doors.', 'good');
     return state;
   };
 

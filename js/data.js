@@ -219,7 +219,7 @@
   ];
 
   SB.TUTORIAL = [
-    { id: 'look', text: 'Open a snake from the Collection tab to see its care, genetics and enclosure.' },
+    { id: 'look', text: 'Open a snake from the Snakes tab to see its care, genetics and enclosure.' },
     { id: 'care', text: 'Feed hungry snakes and clean enclosures (or use “Care round” to do the routine chores).' },
     { id: 'preview', text: 'On the Breeding tab, pick Biscuit and Marigold to preview their offspring odds.' },
     { id: 'pair', text: 'Start the pairing, then press “Advance week” to move time forward.' },
