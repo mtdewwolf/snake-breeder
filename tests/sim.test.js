@@ -243,3 +243,14 @@ test('warnings for sole carriers, Morph Book carriers and running costs', () => 
   assert.ok(sim.weeklyCosts(state) > 5 && sim.weeklyCosts(state) < 40);
   ui.market(state); // renders the keep badge without errors
 });
+
+test('quests complete out of order and low funds suggest a safe sale', () => {
+  const state = SB.state.newGame();
+  state.reputation = 45; // meets "Respected keeper" long before its turn
+  sim.checkGoals(state);
+  assert.ok(state.goalsDone.includes('renowned'), 'later quest completes early');
+  assert.strictEqual(sim.currentGoal(state).id, SB.GOALS.find((g) => !state.goalsDone.includes(g.id)).id);
+  const pick = sim.suggestSale(state);
+  assert.ok(pick, 'something is suggested');
+  assert.deepStrictEqual(sim.soleCarrierOf(state, pick), [], 'never suggests the only carrier when a safer snake exists: ' + pick.name);
+});

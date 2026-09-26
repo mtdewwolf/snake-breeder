@@ -160,7 +160,7 @@
     var p = Math.min(1, g.check(state, SB));
     return '<button type="button" class="quest" data-action="quest" aria-label="Current quest: ' + esc(g.title) + ', ' + Math.round(p * 100) + '% complete. Show details">' +
       '<span class="quest-ring">' + ring(p, 38) + '<span class="quest-pct">' + Math.round(p * 100) + '%</span></span>' +
-      '<span class="quest-text"><span class="quest-label">Quest ' + (state.goalsDone.length + 1) + '/' + SB.GOALS.length + '</span><span class="quest-title">' + esc(g.title) + '</span></span></button>';
+      '<span class="quest-text"><span class="quest-label">Quest ' + (SB.GOALS.indexOf(g) + 1) + '/' + SB.GOALS.length + '</span><span class="quest-title">' + esc(g.title) + '</span></span></button>';
   };
 
   ui.questDetail = function (state) {
@@ -899,7 +899,8 @@
     var sellRows = state.snakes.filter(function (s) { return !sim.isUnrevealed(state, s); }).sort(function (a, b) { return (a.keeper ? 1 : 0) - (b.keeper ? 1 : 0) || a.name.localeCompare(b.name); }).map(function (s) {
       var c = sim.canSell(state, s);
       return '<tr><th scope="row"><button type="button" class="link" data-action="open-snake" data-id="' + s.id + '">' + esc(s.name) + '</button>' + (s.keeper ? ' <span class="keeper">★<span class="sr-only"> keeper</span></span>' : '') + '<div class="small muted">' + (s.sex === 'M' ? '♂' : '♀') + ' ' + U.age(s.ageWeeks) + ' · ' + esc(G.fullLabel(s)) + '</div>' +
-        (function () { var g = sim.bookCarrierGenes(state, s); return g.length ? '<span class="badge badge-keep">🧬 Keep for ' + esc(g.join(', ')) + '</span>' : ''; })() + '</th>' +
+        (function () { var g = sim.bookCarrierGenes(state, s); return g.length ? '<span class="badge badge-keep">🧬 Keep for ' + esc(g.join(', ')) + '</span>' : ''; })() +
+        (function () { var g = sim.soleCarrierOf(state, s); return g.length ? ' <span class="badge badge-rare" title="No other snake in your collection carries this">Only ' + esc(g.join(', ')) + '</span>' : ''; })() + '</th>' +
         '<td>' + U.money(sim.value(state, s)) + '</td><td>' + (c.ok ? btn('Sell…', 'sell', 'data-id="' + s.id + '"', 'btn-small') : '<span class="small">' + chip('warn', 'Not yet') + '<span class="block muted">' + esc(c.reasons[0]) + '</span></span>' +
           (lowFunds && sim.canSurrender(state, s) ? btn('Rescue ' + U.money(sim.surrenderValue(state, s)), 'surrender', 'data-id="' + s.id + '"', 'btn-small btn-ghost') : '')) + '</td></tr>';
     }).join('');

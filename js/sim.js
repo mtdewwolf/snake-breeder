@@ -610,6 +610,18 @@
     }).map(function (n) { return G.gene(n.gene).name; });
   };
 
+  /*
+   * The snake to suggest selling when money is short: a sellable animal that
+   * isn't a keeper and isn't the only carrier of any gene, hatchlings first.
+   */
+  sim.suggestSale = function (state) {
+    var ok = state.snakes.filter(function (s) { return sim.canSell(state, s).ok && !s.keeper; });
+    var safe = ok.filter(function (s) { return !sim.soleCarrierOf(state, s).length && !sim.bookCarrierGenes(state, s).length; });
+    var pool = safe.length ? safe : ok;
+    pool.sort(function (a, b) { return (a.origin === 'Hatched' ? 0 : 1) - (b.origin === 'Hatched' ? 0 : 1) || sim.value(state, b) - sim.value(state, a); });
+    return pool[0] || null;
+  };
+
   /* Weekly running costs: feeding (about every other week for adults) and upkeep. */
   sim.weeklyCosts = function (state) {
     var feed = state.snakes.reduce(function (t, s) { return t + (sim.isJuvenile(s) ? C.feedJuvenile : C.feedAdult / 2); }, 0);
@@ -899,9 +911,11 @@
   };
 
   sim.checkGoals = function (state) {
+    // Any quest whose condition is met completes, even out of order, so one
+    // unlucky hatch can't hold up the rest. The HUD shows the first open one.
     var messages = [];
-    var goal = sim.currentGoal(state);
-    while (goal && goal.check(state, SB) >= 1) {
+    var goal;
+    while ((goal = SB.GOALS.find(function (g) { return state.goalsDone.indexOf(g.id) < 0 && g.check(state, SB) >= 1; }))) {
       state.goalsDone.push(goal.id);
       state.money += goal.reward.money;
       state.reputation += goal.reward.rep;
@@ -909,7 +923,6 @@
       var msg = 'Goal complete: ' + goal.title + '! Reward: ' + reward + '.';
       sim.log(state, msg, 'good');
       messages.push(msg);
-      goal = sim.currentGoal(state);
     }
     messages = messages.concat(sim.checkBook(state));
     state.reputation = Math.min(sim.REP_CAP, state.reputation);
@@ -1076,7 +1089,8 @@
     }
     var feedBill = state.snakes.reduce(function (t, s) { return t + sim.feedCost(s); }, 0);
     if (state.money < Math.max(25, feedBill)) {
-      events.push({ text: 'Funds are low (' + U.money(state.money) + '). Sell a snake on the Market — or, if none can be sold, a rescue will take one for a small grant.', kind: 'bad' });
+      var pick = sim.suggestSale(state);
+      events.push({ text: 'Funds are low (' + U.money(state.money) + '). ' + (pick ? 'Consider selling ' + pick.name + ' (about ' + U.money(sim.value(state, pick)) + ') on the Market.' : 'Nothing can be sold right now — the rescue on the Market will take a snake for a small grant.'), kind: 'bad' });
     }
 
     var housed = sim.houseHomeless(state);
