@@ -9,6 +9,17 @@ npm start        # serves the game at http://localhost:8080 (no dependencies)
 npm test         # genetics, save-migration and long-run game-loop tests (Node 18+)
 ```
 
+### Android APK
+
+The game is wrapped with [Capacitor](https://capacitorjs.com). With JDK 21 and the Android SDK (platform 36, build-tools 35+) installed and `ANDROID_HOME` set:
+
+```bash
+npm install
+npm run android:apk   # copies the game into www/, syncs android/, builds a debug APK
+```
+
+The APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`. After changing the game, `npm run android:sync` updates the Android project; open `android/` in Android Studio to run it on a device or emulator.
+
 You can also open `index.html` directly in a browser. Progress saves automatically to `localStorage`; use **New game…** in the footer to reset.
 
 ## How to play

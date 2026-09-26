@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Clutch &amp; Coil</string>
+    <string name="title_activity_main">Clutch &amp; Coil</string>
+    <string name="package_name">com.mtdewwolf.clutchandcoil</string>
+    <string name="custom_url_scheme">com.mtdewwolf.clutchandcoil</string>
+</resources>
