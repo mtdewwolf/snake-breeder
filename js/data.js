@@ -190,7 +190,33 @@
     { id: 'humidity', name: 'Humidity-holding lids & substrate', price: 180, repeatable: false,
       desc: 'Enclosures dry out far more slowly, so humidity stays in range between checks.' },
     { id: 'incubController', name: 'Incubator controller', price: 150, repeatable: false,
-      desc: 'Holds incubator temperature and humidity steady, protecting egg health.' }
+      desc: 'Holds incubator temperature and humidity steady, protecting egg health. Chores also dial in incubators holding eggs.' },
+    { id: 'climate', name: 'Automatic misters & climate controller', price: 650, repeatable: false,
+      desc: 'Chores also fix humidity and reset thermostats in every occupied enclosure. Without it, tap the 💦 and 🌡️ bubbles yourself.' },
+    { id: 'display', name: 'Public display vivarium', price: 1200, repeatable: true, max: 3,
+      desc: 'A showpiece tank in your shop window. Visitors earn you +1 reputation every 4 weeks per vivarium.' },
+    { id: 'vetLab', name: 'In-house vet corner', price: 900, repeatable: false,
+      desc: 'Vet visits cost half and heal more (+40 health instead of +25).' }
+  ];
+
+  /*
+   * Breeder's catalogue: proven adults from specialist breeders, restocked every
+   * 8 weeks. Pricier than the open Market, but the only reliable source of genes
+   * the starter group lacks. `weight` is how often an entry is offered.
+   */
+  SB.CATALOG = [
+    { genotype: { yellowbelly: 1 }, weight: 3 },
+    { genotype: { pinstripe: 1 }, weight: 1 },
+    { genotype: { pastel: 1 }, weight: 1 },
+    { genotype: { mojave: 1 }, weight: 3 },
+    { genotype: { lesser: 1 }, weight: 2 },
+    { genotype: { piebald: 1 }, weight: 3 },
+    { genotype: { piebald: 2 }, weight: 1 },
+    { genotype: { pastel: 1, yellowbelly: 1 }, weight: 1 },
+    { genotype: { mojave: 1, clown: 1 }, weight: 1 },
+    { genotype: { albino: 1, piebald: 1 }, weight: 1 },
+    { genotype: { banana: 1 }, weight: 1 },
+    { genotype: { clown: 2 }, weight: 1 }
   ];
 
   /* Goals are checked in order; `check(state, SB)` returns a number 0..1 progress. */
@@ -215,12 +241,35 @@
       check: function (s) { return s.discoveries.some(function (d) { return d.label === 'Pastel Clown'; }) ? 1 : 0; } },
     { id: 'renowned', title: 'Respected keeper', reward: { money: 500, rep: 0 },
       desc: 'Reach 40 reputation through healthy animals, honest sales and successful clutches.',
-      check: function (s) { return Math.min(1, s.reputation / 40); } }
+      check: function (s) { return Math.min(1, s.reputation / 40); } },
+    // Arc 2: new blood and the Morph Book.
+    { id: 'newBlood', title: 'New blood', reward: { money: 150, rep: 2 },
+      desc: 'Your starters only carry a few genes. Buy a breeder carrying Yellow Belly, Mojave or Piebald from the Breeder’s catalogue on the Market. Adults need an adult enclosure, so buy one in the Shop first.',
+      check: function (s) { return s.snakes.some(function (x) { return x.origin === 'Bought' && ['yellowbelly', 'mojave', 'piebald'].some(function (g) { return SB.genetics.carryProb(x, g) >= 0.99; }); }) || (s.stats.boughtNewGenes || 0) > 0 ? 1 : 0; } },
+    { id: 'classics', title: 'Complete The Classics', reward: { money: 300, rep: 3 },
+      desc: 'Fill every sticker on the first Morph Book page. Tap an empty sticker in the Book to see which of your snakes could produce it.',
+      check: function (s) { var pg = SB.BOOK[0]; return pg.slots.filter(function (sl) { return SB.sim.slotDiscovery(s, sl); }).length / pg.slots.length; } },
+    { id: 'super', title: 'Double up', reward: { money: 400, rep: 4 },
+      desc: 'Hatch a super form: pair two carriers of the same incomplete-dominant gene (e.g. Pastel × Pastel for a Super Pastel).',
+      check: function (s) { return s.discoveries.some(function (d) { return ['Super Pastel', 'Ivory', 'Blue-Eyed Leucistic'].indexOf(d.label) >= 0; }) ? 1 : 0; } },
+    { id: 'display', title: 'Open to the public', reward: { money: 0, rep: 5 },
+      desc: 'Install a public display vivarium from the Shop so visitors can see your work.',
+      check: function (s) { return s.upgrades.display ? 1 : 0; } },
+    { id: 'designer', title: 'Designer collection', reward: { money: 1000, rep: 6 },
+      desc: 'Complete the Designer Combos page of the Morph Book.',
+      check: function (s) { var pg = SB.BOOK[2]; return pg.slots.filter(function (sl) { return SB.sim.slotDiscovery(s, sl); }).length / pg.slots.length; } },
+    { id: 'master', title: 'Master breeder', reward: { money: 2500, rep: 10 },
+      desc: 'Fill every sticker in the Morph Book and reach 150 reputation.',
+      check: function (s) {
+        var tot = 0, got = 0;
+        SB.BOOK.forEach(function (pg) { pg.slots.forEach(function (sl) { tot++; if (SB.sim.slotDiscovery(s, sl)) got++; }); });
+        return (got / tot) * 0.7 + Math.min(1, s.reputation / 150) * 0.3;
+      } }
   ];
 
   SB.TUTORIAL = [
-    { id: 'look', text: 'Open a snake from the Collection tab to see its care, genetics and enclosure.' },
-    { id: 'care', text: 'Feed hungry snakes and clean enclosures (or use “Care round” to do the routine chores).' },
+    { id: 'look', text: 'Open a snake from the Snakes tab to see its care, genetics and enclosure.' },
+    { id: 'care', text: 'Press Chores to feed, water and clean. Tap 💦 and 🌡️ bubbles to fix humidity and heat — Chores won’t, until you buy climate controllers.' },
     { id: 'preview', text: 'On the Breeding tab, pick Biscuit and Marigold to preview their offspring odds.' },
     { id: 'pair', text: 'Start the pairing, then press “Advance week” to move time forward.' },
     { id: 'incubate', text: 'Keep the incubator at 88–90°F and 90–100% humidity until the eggs hatch.' },
@@ -289,7 +338,15 @@
     'Latte', 'Wren', 'Sprout', 'Truffle', 'Kumquat', 'Persimmon', 'Moss', 'Dune', 'Pebble', 'Sienna',
     'Umber', 'Ochre', 'Poppy', 'Sunny', 'Biscotti', 'Churro', 'Dumpling', 'Noodle', 'Waffle', 'Pretzel',
     'Rosemary', 'Thyme', 'Anise', 'Cocoa', 'Butterscotch', 'Caramel', 'Tofu', 'Miso', 'Yuzu', 'Lychee',
-    'Beacon', 'Comet', 'Meadow', 'Harbor', 'Willow', 'Aspen', 'Cedar', 'Linden', 'Rowan', 'Marble'
+    'Beacon', 'Comet', 'Meadow', 'Harbor', 'Willow', 'Aspen', 'Cedar', 'Linden', 'Rowan', 'Marble',
+    'Almond', 'Apricot', 'Bagel', 'Banjo', 'Bean', 'Blossom', 'Bramblewood', 'Brioche', 'Buttons', 'Cashew',
+    'Cayenne', 'Cinnamon', 'Clementine', 'Cobble', 'Crumpet', 'Custard', 'Daffodil', 'Dandelion', 'Dash', 'Doodle',
+    'Echo', 'Elderberry', 'Fennel', 'Fern', 'Fudge', 'Gingersnap', 'Gnocchi', 'Hickory', 'Honey', 'Indigo',
+    'Jasper', 'Jellybean', 'Kale', 'Kiwi', 'Lentil', 'Licorice', 'Lotus', 'Macaron', 'Mocha', 'Muffin',
+    'Nectar', 'Nori', 'Nugget', 'Oat', 'Onyx', 'Opal', 'Orzo', 'Paisley', 'Peanut', 'Pepperoni',
+    'Pickle', 'Pinecone', 'Pixel', 'Plum', 'Praline', 'Pudding', 'Quill', 'Radish', 'Raisin', 'Ripple',
+    'Russet', 'Saffy', 'Sage', 'Scone', 'Shortbread', 'Sparrow', 'Sprinkle', 'Sugarsnap', 'Taffy', 'Tangerine',
+    'Tapioca', 'Teacake', 'Tiramisu', 'Topaz', 'Turmeric', 'Twig', 'Vanilla', 'Walnut', 'Wasabi', 'Zephyr'
   ];
 
   SB.TEMPERAMENTS = ['Calm', 'Curious', 'Shy', 'Bold', 'Easygoing', 'Inquisitive', 'Gentle'];

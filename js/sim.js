@@ -57,6 +57,9 @@
     }, 0);
   };
 
+  // Reputation tops out here; sale prices already stop rising at 100.
+  sim.REP_CAP = 200;
+
   sim.priceMultiplier = function (state) { return 1 + U.clamp(state.reputation, 0, 100) / 100; };
 
   /* Market value, based on what can be proven about the snake (knowledge), not hidden truth. */
@@ -85,7 +88,9 @@
     return { ok: reasons.length === 0, reasons: reasons };
   };
 
-  sim.feedCost = function (snake) { return sim.isJuvenile(snake) ? C.feedJuvenile : C.feedAdult; };
+  // A hatchling's first meal comes from the starter pinkies kept with the incubator,
+  // so a keeper who is out of money can still get babies feeding and ready to sell.
+  sim.feedCost = function (snake) { return snake.mealsEaten === 0 ? 0 : sim.isJuvenile(snake) ? C.feedJuvenile : C.feedAdult; };
 
   sim.feed = function (state, id, quiet) {
     var s = sim.snake(state, id);
@@ -186,14 +191,17 @@
     var s = sim.snake(state, id);
     if (!s) return fail('That snake could not be found.');
     if (s.health >= 90) return fail(s.name + ' is in great health — no vet visit needed.');
-    if (state.money < C.vet) return fail('A vet visit costs ' + U.money(C.vet) + ' — not enough money.');
-    state.money -= C.vet;
-    s.health = U.clamp(s.health + 25, 0, 100);
+    var cost = sim.vetCost(state), heal = state.upgrades.vetLab ? 40 : 25;
+    if (state.money < cost) return fail('A vet visit costs ' + U.money(cost) + ' — not enough money.');
+    state.money -= cost;
+    s.health = U.clamp(s.health + heal, 0, 100);
     s.stress = U.clamp(s.stress - 10, 0, 100);
-    history(state, s, 'Vet check-up and treatment (+25 health).');
+    history(state, s, 'Vet check-up and treatment (+' + heal + ' health).');
     sim.log(state, s.name + ' saw the vet and is feeling better.', 'good');
-    return ok(s.name + ' was treated by the vet. Health +25.');
+    return ok(s.name + ' was treated by the vet. Health +' + heal + '.');
   };
+
+  sim.vetCost = function (state) { return state.upgrades.vetLab ? Math.round(C.vet / 2) : C.vet; };
 
   sim.fitsIn = function (snake, enc) {
     return enc.kind === 'adult' || snake.weight <= T.tubMaxWeight;
@@ -230,9 +238,13 @@
     return ok(s.keeper ? s.name + ' is marked as a keeper and hidden from quick-sell lists.' : s.name + ' is no longer marked as a keeper.');
   };
 
-  /* Routine chores for everyone: feed hungry snakes, fresh water, clean dirty enclosures. */
+  /*
+   * Routine chores for everyone: feed hungry snakes, fresh water, clean dirty
+   * enclosures. Habitat (humidity, heat) and incubators are only covered once the
+   * matching upgrade is installed; until then the keeper taps the room's bubbles.
+   */
   sim.careRound = function (state) {
-    var fed = 0, refused = [], cleaned = 0, watered = 0, spent = 0, startMoney = state.money, broke = false;
+    var fed = 0, refused = [], cleaned = 0, watered = 0, misted = 0, heated = 0, tuned = 0, spent = 0, startMoney = state.money, broke = false;
     state.snakes.forEach(function (s) {
       if (s.hunger < 35) return;
       if (state.money < sim.feedCost(s)) { broke = true; return; }
@@ -242,17 +254,28 @@
     state.enclosures.forEach(function (e) {
       if (!sim.occupant(state, e)) return;
       if (e.water < 95) { e.water = 100; watered++; }
+      // Habitat fixes are free, so they run even when money is short.
+      if (state.upgrades.climate && (e.humidity < CARE.humidity.ideal[0] || e.humidity > CARE.humidity.ideal[1]) ) { sim.resetHumidity(state, e.id); misted++; }
+      if (state.upgrades.climate && (e.temp < CARE.temp.ideal[0] || e.temp > CARE.temp.ideal[1])) { sim.resetThermostat(state, e.id); heated++; }
       if (e.clean < 75) {
         if (state.money < C.cleanEnclosure) { broke = true; return; }
         sim.clean(state, e.id, true); cleaned++;
       }
     });
+    if (state.upgrades.incubController) sim.activeProjects(state).forEach(function (p) {
+      var inc = state.incubators.find(function (i) { return i.id === p.incubatorId; });
+      if (!inc) return;
+      if (inc.temp < CARE.incubTemp.ideal[0] || inc.temp > CARE.incubTemp.ideal[1] || inc.humidity < CARE.incubHumidity.ideal[0]) { sim.tuneIncubator(state, inc.id); tuned++; }
+    });
     spent = startMoney - state.money;
-    if (!fed && !cleaned && !watered) return fail('Nothing needed doing — everyone is fed, watered and clean' + (refused.length ? ' (refused food: ' + refused.join(', ') + ')' : '') + '.');
+    if (!fed && !cleaned && !watered && !misted && !heated && !tuned) return fail('Nothing needed doing — everyone is fed, watered and clean' + (refused.length ? ' (refused food: ' + refused.join(', ') + ')' : '') + '.');
     var parts = [];
     if (fed) parts.push('fed ' + fed);
     if (watered) parts.push('fresh water ×' + watered);
     if (cleaned) parts.push('cleaned ' + cleaned);
+    if (misted) parts.push('humidity fixed ×' + misted);
+    if (heated) parts.push('thermostat reset ×' + heated);
+    if (tuned) parts.push('incubator dialled in ×' + tuned);
     var msg = 'Care round: ' + parts.join(', ') + ' (' + U.money(spent) + ').';
     if (refused.length) msg += ' Refused food: ' + refused.join(', ') + '.';
     if (broke) msg += ' Some chores were skipped — not enough money.';
@@ -629,6 +652,38 @@
     return { id: SB.state.nextId(state, 'ls'), seller: U.pick(SB.BUYERS), snake: snake, price: Math.round(sim.value(state, snake) * 1.15 / 5) * 5 };
   }
 
+  /*
+   * A proven adult from the Breeder's catalogue. Favours genes the collection
+   * lacks, and a second carrier of an incomplete-dominant gene when the keeper
+   * owns just one (a super form needs two unrelated carriers).
+   */
+  function makeCatalogOffer(state, taken) {
+    var have = {};
+    state.snakes.forEach(function (x) { G.activeLoci(G.norm(x.genotype)).forEach(function (L) { have[L] = (have[L] || 0) + 1; }); });
+    var pool = SB.CATALOG.map(function (c) {
+      var geno = G.norm(c.genotype), loci = Object.keys(geno);
+      var fresh = loci.some(function (L) { return !have[L]; });
+      var pairUp = loci.some(function (L) { return have[L] === 1 && geno[L].some(function (a) { return a && G.gene(a).type === 'codominant'; }); });
+      return { c: c, w: (c.weight || 1) * (fresh || pairUp ? 3 : 1) * (taken[JSON.stringify(c.genotype)] ? 0 : 1) };
+    }).filter(function (x) { return x.w > 0; });
+    var total = pool.reduce(function (t, x) { return t + x.w; }, 0), r = U.rand() * total, pick = pool[0];
+    for (var i = 0; i < pool.length; i++) { r -= pool[i].w; if (r < 0) { pick = pool[i]; break; } }
+    taken[JSON.stringify(pick.c.genotype)] = true;
+    var sex = U.rand() < 0.55 ? 'F' : 'M';
+    var snake = SB.state.makeSnake(state, {
+      genotype: pick.c.genotype, sex: sex, ageWeeks: U.randInt(110, 180),
+      weight: sex === 'F' ? U.randInt(1600, 2000) : U.randInt(800, 1150),
+      health: U.randInt(92, 100), stress: U.randInt(10, 20), hunger: 20, origin: 'Bought', mealsEaten: 20
+    });
+    return { id: SB.state.nextId(state, 'ct'), seller: U.pick(['Tomas (morph collector)', 'Mei (breeder, two towns over)', 'The Coil Club']), snake: snake, price: Math.round(sim.value(state, snake) / sim.priceMultiplier(state) * 1.6 / 5) * 5, catalog: true };
+  }
+
+  function restockCatalog(state) {
+    var taken = {};
+    state.market.catalog = [];
+    for (var i = 0; i < 3; i++) state.market.catalog.push(makeCatalogOffer(state, taken));
+  }
+
   function makeRequest(state) {
     var t = U.pick(SB.REQUEST_TEMPLATES);
     return { id: SB.state.nextId(state, 'rq'), buyer: U.pick(SB.BUYERS), text: t.text, criteria: t.criteria, bonus: t.bonus, expires: state.week + U.randInt(8, 14) };
@@ -654,8 +709,10 @@
       var tsnake = SB.state.makeSnake(state, { genotype: {}, knowledge: { clown: [0, 1, 0] }, sex: 'F', ageWeeks: 120, weight: 1520, origin: 'Traded', health: 90 });
       tsnake.genotype = G.norm({ clown: 1 });
       mk.trades.push({ id: SB.state.nextId(state, 'tr'), trader: 'The Coil Club', text: 'Will trade an adult female het Clown for any Pinstripe.', criteria: { visual: 'pinstripe' }, snake: tsnake, expires: 40 });
+      restockCatalog(state);
       return;
     }
+    if (!mk.catalog || state.week % 8 === 0) restockCatalog(state);
     while (mk.requests.length < 3) mk.requests.push(makeRequest(state));
     if (mk.requests.length < 5 && U.rand() < 0.2) mk.requests.push(makeRequest(state));
     if (state.week % 4 === 0) {
@@ -700,8 +757,34 @@
     return ok(s.name + ' sold to ' + who + ' for ' + U.money(price) + (repGain ? ' (' + (repGain > 0 ? '+' : '') + repGain + ' reputation)' : '') + '.');
   };
 
+  /*
+   * The way out when nothing can be sold: a reptile rescue takes any snake that
+   * isn't in an egg or a breeding project, whatever its health, and pays a small
+   * rehoming grant. Costs a little reputation.
+   */
+  sim.surrenderValue = function (state, snake) { return Math.max(20, Math.round(sim.value(state, snake) * 0.3 / 5) * 5); };
+  sim.canSurrender = function (state, snake) {
+    return !sim.isUnrevealed(state, snake) && !sim.projectFor(state, snake);
+  };
+  sim.surrender = function (state, id) {
+    var s = sim.snake(state, id);
+    if (!s) return fail('That snake could not be found.');
+    if (!sim.canSurrender(state, s)) return fail(s.name + ' can’t go to the rescue right now (still in its egg or in a breeding project).');
+    var grant = sim.surrenderValue(state, s);
+    state.money += grant;
+    state.reputation = Math.max(0, state.reputation - 1);
+    removeSnake(state, s);
+    sim.log(state, s.name + ' went to Hillside Reptile Rescue (' + U.money(grant) + ' rehoming grant, −1 reputation).', 'warn');
+    return ok(s.name + ' went to the rescue. You received ' + U.money(grant) + '.');
+  };
+
+  sim.findOffer = function (state, id) {
+    var mk = state.market;
+    return mk.listings.find(function (x) { return x.id === id; }) || (mk.catalog || []).find(function (x) { return x.id === id; }) || null;
+  };
+
   sim.buy = function (state, listingId) {
-    var l = state.market.listings.find(function (x) { return x.id === listingId; });
+    var l = sim.findOffer(state, listingId);
     if (!l) return fail('That listing is gone.');
     if (state.money < l.price) return fail('You need ' + U.money(l.price) + ' but have ' + U.money(state.money) + '.');
     var home = findHome(state, l.snake);
@@ -713,6 +796,9 @@
     s.history = [{ week: state.week, text: 'Bought from ' + l.seller + ' for ' + U.money(l.price) + '.' }];
     state.snakes.push(s);
     state.market.listings = state.market.listings.filter(function (x) { return x.id !== l.id; });
+    state.market.catalog = (state.market.catalog || []).filter(function (x) { return x.id !== l.id; });
+    state.stats.bought = (state.stats.bought || 0) + 1;
+    if (['yellowbelly', 'mojave', 'piebald'].some(function (g) { return G.carryProb(s, g) >= 0.99; })) state.stats.boughtNewGenes = (state.stats.boughtNewGenes || 0) + 1;
     sim.log(state, 'Welcomed ' + s.name + ' (' + G.fullLabel(s) + ') from ' + l.seller + '.', 'good');
     return ok(s.name + ' joined your collection in ' + home.name + '.');
   };
@@ -746,7 +832,7 @@
     if (id === 'tub') return state.enclosures.filter(function (e) { return e.kind === 'tub'; }).length;
     if (id === 'adult') return state.enclosures.filter(function (e) { return e.kind === 'adult'; }).length;
     if (id === 'incubator') return state.incubators.length;
-    return state.upgrades[id] ? 1 : 0;
+    return Number(state.upgrades[id] || 0);
   };
 
   sim.buyUpgrade = function (state, id) {
@@ -763,7 +849,7 @@
     } else if (id === 'incubator') {
       state.incubators.push(SB.state.makeIncubator(state, count + 1));
     } else {
-      state.upgrades[id] = true;
+      state.upgrades[id] = u.repeatable ? count + 1 : true;
     }
     var housed = sim.houseHomeless(state);
     sim.log(state, 'Purchased: ' + u.name + ' (' + U.money(u.price) + ').' + (housed ? ' ' + housed + ' snake(s) moved out of temporary tubs.' : ''), 'good');
@@ -791,7 +877,9 @@
       messages.push(msg);
       goal = sim.currentGoal(state);
     }
-    return messages.concat(sim.checkBook(state));
+    messages = messages.concat(sim.checkBook(state));
+    state.reputation = Math.min(sim.REP_CAP, state.reputation);
+    return messages;
   };
 
   /* ---------- Weekly turn ---------- */
@@ -946,6 +1034,16 @@
     var upkeep = state.enclosures.length * C.upkeepPerEnclosure + state.incubators.length;
     if (state.money >= upkeep) state.money -= upkeep;
     else { state.money = 0; events.push({ text: 'You couldn’t fully cover this week’s electricity (' + U.money(upkeep) + '). Sell a snake to stay afloat.', kind: 'bad' }); }
+
+    var displays = Number(state.upgrades.display || 0);
+    if (displays && w % 4 === 0 && state.reputation < sim.REP_CAP) {
+      state.reputation += displays;
+      events.push({ text: 'Visitors admired your display vivarium' + (displays > 1 ? 's' : '') + ' (+' + displays + ' reputation).', kind: 'good' });
+    }
+    var feedBill = state.snakes.reduce(function (t, s) { return t + sim.feedCost(s); }, 0);
+    if (state.money < Math.max(25, feedBill)) {
+      events.push({ text: 'Funds are low (' + U.money(state.money) + '). Sell a snake on the Market — or, if none can be sold, a rescue will take one for a small grant.', kind: 'bad' });
+    }
 
     var housed = sim.houseHomeless(state);
     if (housed) events.push({ text: housed + ' snake(s) moved out of temporary tubs.', kind: 'good' });

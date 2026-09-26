@@ -1,7 +1,7 @@
 {
-  "name": "scale-and-nasl",
+  "name": "clutch-and-coil",
   "version": "1.0.0",
-  "description": "Scale & نسل — a cozy ball python breeding and genetics game that runs in the browser.",
+  "description": "Clutch & Coil — a cozy ball python breeding and genetics game that runs in the browser.",
   "private": true,
   "scripts": {
     "start": "node server.js",

@@ -5,7 +5,7 @@
   'use strict';
 
   var U = SB.util, G = SB.genetics;
-  var SAVE_KEY = 'scale-and-nasl-save-v1'; // key kept so older saves are found and migrated
+  var SAVE_KEY = 'scale-and-nasl-save-v1'; // key predates the rename; kept so older saves are found and migrated
   var VERSION = 2;
 
   var S = {};
@@ -16,9 +16,10 @@
   };
 
   S.uniqueName = function (state) {
+    // Avoid current names and recently used ones; older names come back round.
     var used = {};
     state.snakes.forEach(function (s) { used[s.name.toLowerCase()] = true; });
-    (state.usedNames || []).forEach(function (n) { used[n.toLowerCase()] = true; });
+    (state.usedNames || []).slice(-60).forEach(function (n) { used[n.toLowerCase()] = true; });
     var pool = SB.NAMES.filter(function (n) { return !used[n.toLowerCase()]; });
     var name;
     if (pool.length) {
@@ -28,7 +29,7 @@
       while (used[(base + ' ' + i).toLowerCase()]) i++;
       name = base + ' ' + i;
     }
-    state.usedNames = (state.usedNames || []).concat([name]);
+    state.usedNames = (state.usedNames || []).concat([name]).slice(-200);
     return name;
   };
 
@@ -83,7 +84,7 @@
     var state = {
       version: VERSION, week: 1, money: 600, reputation: 5, nextId: 1,
       snakes: [], enclosures: [], incubators: [], projects: [],
-      upgrades: { thermostats: false, humidity: false, incubController: false },
+      upgrades: { thermostats: false, humidity: false, incubController: false, climate: false, vetLab: false, display: 0 },
       market: { requests: [], listings: [], trades: [] },
       goalsDone: [], discoveries: [], log: [], usedNames: [],
       stats: { fed: 0, cleaned: 0, pairings: 0, hatched: 0, sold: 0, requestsFilled: 0 },
@@ -122,7 +123,7 @@
     state.enclosures[3].water = 35;
 
     SB.sim.refreshMarket(state, true);
-    SB.sim.log(state, 'Welcome to Scale & نسل! Your small ball python operation opens its doors.', 'good');
+    SB.sim.log(state, 'Welcome to Clutch & Coil! Your small ball python operation opens its doors.', 'good');
     return state;
   };
 
