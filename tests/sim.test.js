@@ -121,3 +121,176 @@ test('collection dashboard, search filters, and snake records show useful collec
   assert.doesNotMatch(femaleFilter, /Secret hatchling/);
   assert.match(ui.collection(state, { filter: 'all', sort: 'name' }), /Eggs to reveal/);
 });
+
+test('habitat bubbles survive the cap; Chores fixes habitat only with climate controllers', () => {
+  const state = SB.state.newGame();
+  const s = state.snakes[0], e = sim.enclosureOf(state, s);
+  s.hunger = 60; e.water = 50; e.clean = 50; e.humidity = 25; e.temp = 84;
+  const needs = ui.needs(state, s, e).slice(0, 4).map((n) => n.action);
+  assert.ok(needs.includes('fix-hum'), 'humidity bubble survives the 4-bubble cap');
+  assert.ok(needs.includes('fix-temp'), 'temperature bubble survives the 4-bubble cap');
+  assert.ok(sim.careRound(state).ok);
+  assert.strictEqual(e.humidity, 25, 'basic Chores leave humidity to the keeper');
+  assert.strictEqual(e.temp, 84);
+  state.money = 5000;
+  assert.ok(sim.buyUpgrade(state, 'climate').ok);
+  assert.ok(sim.careRound(state).ok);
+  assert.ok(e.humidity >= SB.CARE.humidity.ideal[0] && e.humidity <= SB.CARE.humidity.ideal[1], 'humidity back in range');
+  assert.strictEqual(e.temp, 90);
+});
+
+test('a broke keeper can always recover: free first meal and the rescue', () => {
+  const state = SB.state.newGame();
+  state.money = 0;
+  const baby = SB.state.makeSnake(state, { genotype: {}, origin: 'Hatched', ageWeeks: 2, mealsEaten: 0, hunger: 60, health: 95 });
+  baby.enclosureId = sim.freeEnclosures(state)[0].id;
+  state.snakes.push(baby);
+  assert.strictEqual(sim.canSell(state, baby).ok, false);
+  assert.ok(sim.feed(state, baby.id).ok, 'first meal is free');
+  assert.ok(sim.canSell(state, baby).ok, 'fed hatchling can be sold');
+  const sick = state.snakes[0];
+  sick.health = 10;
+  assert.strictEqual(sim.canSell(state, sick).ok, false);
+  const r = sim.surrender(state, sick.id);
+  assert.ok(r.ok, r.msg);
+  assert.ok(state.money >= 20, 'rescue pays a grant');
+  assert.ok(!sim.snake(state, sick.id));
+});
+
+test('catalogue offers missing genes and the second quest arc follows', () => {
+  const state = SB.state.newGame();
+  assert.strictEqual(state.market.catalog.length, 3);
+  const missing = ['yellowbelly', 'bel', 'piebald', 'banana'];
+  assert.ok(state.market.catalog.some((l) => Object.keys(l.snake.genotype).some((L) => missing.includes(L))), 'offers a gene the starters lack');
+  state.goalsDone = SB.GOALS.slice(0, 7).map((g) => g.id);
+  assert.strictEqual(sim.currentGoal(state).id, 'newBlood');
+  state.money = 20000;
+  const offer = state.market.catalog.find((l) => ['yellowbelly', 'mojave', 'piebald'].some((g) => G.carryProb(l.snake, g) >= 0.99));
+  if (offer) {
+    assert.strictEqual(sim.buy(state, offer.id).ok, false, 'no free adult enclosure yet');
+    assert.ok(sim.buyUpgrade(state, 'adult').ok);
+    assert.ok(sim.buy(state, offer.id).ok);
+    sim.checkGoals(state);
+    assert.ok(state.goalsDone.includes('newBlood'));
+  }
+  for (let i = 0; i < 3; i++) assert.ok(sim.buyUpgrade(state, 'display').ok);
+  assert.strictEqual(sim.buyUpgrade(state, 'display').ok, false, 'display vivariums are capped');
+  const rep = state.reputation;
+  while (state.week % 4 !== 3) sim.advanceWeek(state);
+  sim.advanceWeek(state);
+  assert.ok(state.reputation >= rep + 3, 'visitors add reputation every 4 weeks');
+});
+
+test('names come back round instead of running out', () => {
+  const state = SB.state.newGame();
+  for (let i = 0; i < 400; i++) SB.state.uniqueName(state);
+  const n = SB.state.uniqueName(state);
+  assert.ok(!/\d/.test(n), 'still a plain name after 400 hatchlings: ' + n);
+});
+
+test('reputation caps at 200 and catalogue prices ignore it', () => {
+  const state = SB.state.newGame();
+  state.reputation = 500;
+  sim.checkGoals(state);
+  assert.strictEqual(state.reputation, sim.REP_CAP);
+  const l = state.market.catalog[0];
+  const snake = l.snake;
+  state.reputation = 0;
+  const low = Math.round(sim.value(state, snake) / sim.priceMultiplier(state) * 1.6 / 5) * 5;
+  state.reputation = 100;
+  const high = Math.round(sim.value(state, snake) / sim.priceMultiplier(state) * 1.6 / 5) * 5;
+  assert.ok(Math.abs(low - high) <= 5, 'catalogue price does not scale with reputation');
+});
+
+test('catalogue leans toward a second carrier for super forms', () => {
+  const orig = G.rng;
+  G.rng = seeded(7);
+  try {
+    let pastel = 0, runs = 300;
+    for (let i = 0; i < runs; i++) {
+      const state = SB.state.newGame(); // Biscuit is the only Pastel
+      state.week = 8;
+      sim.refreshMarket(state, false);
+      if (state.market.catalog.some((l) => G.copies(l.snake.genotype, 'pastel') > 0)) pastel++;
+    }
+    assert.ok(pastel / runs > 0.2, 'a Pastel partner shows up often: ' + pastel + '/' + runs);
+  } finally { G.rng = orig; }
+});
+
+test('catalogue offers the sex the collection is short of', () => {
+  const orig = G.rng;
+  G.rng = seeded(11);
+  try {
+    let f = 0, n = 0;
+    for (let i = 0; i < 100; i++) {
+      const state = SB.state.newGame();
+      state.snakes.forEach((s) => { s.sex = 'M'; });
+      state.week = 8;
+      sim.refreshMarket(state, false);
+      state.market.catalog.forEach((l) => { n++; if (l.snake.sex === 'F') f++; });
+    }
+    assert.ok(f / n > 0.65, 'mostly females offered to an all-male collection: ' + f + '/' + n);
+  } finally { G.rng = orig; }
+});
+
+test('warnings for sole carriers, Morph Book carriers and running costs', () => {
+  const state = SB.state.newGame();
+  const juniper = state.snakes.find((s) => s.name === 'Juniper');
+  assert.deepStrictEqual(sim.soleCarrierOf(state, juniper), ['Pinstripe'], 'only Pinstripe is unique to Juniper (Pepper carries Albino)');
+  const baby = SB.state.makeSnake(state, { genotype: {}, knowledge: { piebald: [0.34, 0.66, 0] }, origin: 'Hatched' });
+  state.snakes.push(baby);
+  assert.deepStrictEqual(sim.bookCarrierGenes(state, baby), ['Piebald']);
+  assert.ok(sim.weeklyCosts(state) > 5 && sim.weeklyCosts(state) < 40);
+  ui.market(state); // renders the keep badge without errors
+});
+
+test('quests complete out of order and low funds suggest a safe sale', () => {
+  const state = SB.state.newGame();
+  state.reputation = 45; // meets "Respected keeper" long before its turn
+  sim.checkGoals(state);
+  assert.ok(state.goalsDone.includes('renowned'), 'later quest completes early');
+  assert.strictEqual(sim.currentGoal(state).id, SB.GOALS.find((g) => !state.goalsDone.includes(g.id)).id);
+  const pick = sim.suggestSale(state);
+  assert.ok(pick, 'something is suggested');
+  assert.deepStrictEqual(sim.soleCarrierOf(state, pick), [], 'never suggests the only carrier when a safer snake exists: ' + pick.name);
+});
+
+test('catalogue treats Mojave as new even when Lesser is owned', () => {
+  const orig = G.rng;
+  G.rng = seeded(21);
+  try {
+    let moj = 0, runs = 200;
+    for (let i = 0; i < runs; i++) {
+      const state = SB.state.newGame();
+      const les = SB.state.makeSnake(state, { genotype: { lesser: 1 }, sex: 'F', ageWeeks: 150, weight: 1700 });
+      state.snakes.push(les);
+      state.week = 8;
+      sim.refreshMarket(state, false);
+      if (state.market.catalog.some((l) => G.copies(l.snake.genotype, 'mojave') > 0)) moj++;
+    }
+    assert.ok(moj / runs > 0.3, 'Mojave still offered often: ' + moj + '/' + runs);
+  } finally { G.rng = orig; }
+});
+
+test('showcase breeders appear for rich keepers and are pricey', () => {
+  const state = SB.state.newGame();
+  state.week = 8; state.money = 500;
+  sim.refreshMarket(state, false);
+  assert.ok(!state.market.catalog.some((l) => l.showcase), 'no showcase when poor');
+  state.week = 16; state.money = 10000;
+  sim.refreshMarket(state, false);
+  const show = state.market.catalog.find((l) => l.showcase);
+  assert.ok(show, 'showcase offered when rich');
+  assert.ok(G.visualForms(show.snake.genotype).length >= 1 && show.price >= 900, 'showcase is a designer/super morph at a premium: ' + show.price);
+});
+
+test('quest window suggests pairings for the target morph', () => {
+  const state = SB.state.newGame();
+  const q = sim.questPairs(state, SB.GOALS.find((g) => g.id === 'pastelClown'));
+  assert.deepStrictEqual(q.targets, ['Pastel Clown']);
+  assert.ok(q.pairs.some((p) => p.male.name === 'Biscuit' && p.female.name === 'Marigold'));
+  const sup = sim.questPairs(state, SB.GOALS.find((g) => g.id === 'super'));
+  assert.ok(sup.targets.length === 3);
+  state.goalsDone = SB.GOALS.slice(0, 5).map((g) => g.id).concat(['clown']);
+  assert.ok(ui.questDetail(state).includes('Best pairings for'));
+});

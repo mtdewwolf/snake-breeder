@@ -1,4 +1,4 @@
-# Scale & نسل — Ball Python Breeder
+# Clutch & Coil — Ball Python Breeder
 
 A cozy, turn-based browser game about running a small ball python breeding operation: care for your snakes, learn their genetics, preview pairings, incubate clutches, hatch babies with inherited traits, and find them good homes.
 
@@ -9,16 +9,29 @@ npm start        # serves the game at http://localhost:8080 (no dependencies)
 npm test         # genetics, save-migration and long-run game-loop tests (Node 18+)
 ```
 
+### Android APK
+
+The game is wrapped with [Capacitor](https://capacitorjs.com). With JDK 21 and the Android SDK (platform 36, build-tools 35+) installed and `ANDROID_HOME` set:
+
+```bash
+npm install
+npm run android:apk   # copies the game into www/, syncs android/, builds a debug APK
+```
+
+The APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`. After changing the game, `npm run android:sync` updates the Android project; open `android/` in Android Studio to run it on a device or emulator.
+
 You can also open `index.html` directly in a browser. Progress saves automatically to `localStorage`; use **New game…** in the footer to reset.
 
 ## How to play
 
 1. Start in the **Room**: each tank shows its snake, and bubbles above it flag needs (tap a bubble to feed, water, clean or fix the habitat).
-2. Press **Chores** to handle routine care for everyone, and follow the quest shown in the top bar.
+2. Press **Chores** to feed, water and clean everyone, then tap any 💦 / 🌡️ bubbles left over: humidity and heat are yours to fix until you buy climate controllers in the **Shop**. Follow the quest shown in the top bar.
 3. On **Breeding**, pick a male and female to see per-egg outcome odds, then start the pairing.
 4. Press **Next week** (or `N`) — pairing → gravid → eggs → incubation → hatch.
-5. Keep the incubator at 88–90°F and 90–100% humidity.
-6. Keep favourites (★) and sell or trade others on the **Market**; expand on **Facility**.
+5. Keep the incubator at 88–90°F and 90–100% humidity (the room's incubator card has a **Fix conditions** button).
+6. Keep favourites (★) and sell or trade others on the **Market**; expand in the **Shop**.
+7. After the first quest arc, the **Breeder's catalogue** on the Market sells proven adults carrying genes your starters lack (Yellow Belly, Mojave, Lesser, Piebald…). Use them to fill the **Morph Book**.
+8. Short on money? A hatchling's first meal is free, and if nothing can be sold, the rescue will take any snake for a small grant (−1 reputation).
 
 ## Code layout
 

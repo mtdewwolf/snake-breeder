@@ -142,7 +142,7 @@
   ui.renderTop = function (state) {
     var cap = state.enclosures.length, used = state.snakes.filter(function (s) { return s.enclosureId; }).length;
     return res('coin', COIN, U.money(state.money), 'Funds', Math.round(state.money)) +
-      res('rep', '★', String(state.reputation), 'Reputation', state.reputation) +
+      res('rep', '★', String(state.reputation), 'Reputation (max ' + sim.REP_CAP + ')', state.reputation) +
       res('week', '📅', 'Wk ' + state.week, 'Week') +
       res('house', '🏠', used + '/' + cap, 'Enclosures in use');
   };
@@ -160,8 +160,23 @@
     var p = Math.min(1, g.check(state, SB));
     return '<button type="button" class="quest" data-action="quest" aria-label="Current quest: ' + esc(g.title) + ', ' + Math.round(p * 100) + '% complete. Show details">' +
       '<span class="quest-ring">' + ring(p, 38) + '<span class="quest-pct">' + Math.round(p * 100) + '%</span></span>' +
-      '<span class="quest-text"><span class="quest-label">Quest ' + (state.goalsDone.length + 1) + '/' + SB.GOALS.length + '</span><span class="quest-title">' + esc(g.title) + '</span></span></button>';
+      '<span class="quest-text"><span class="quest-label">Quest ' + (SB.GOALS.indexOf(g) + 1) + '/' + SB.GOALS.length + '</span><span class="quest-title">' + esc(g.title) + '</span></span></button>';
   };
+
+  /* "How to get there": the best pairings in the collection for a quest's target morphs. */
+  function questPairsHTML(state, g) {
+    var q = sim.questPairs(state, g);
+    if (!q || !q.targets.length) return '';
+    var head = '<h3>Best pairings for ' + esc(q.targets.slice(0, 3).join(', ') + (q.targets.length > 3 ? '…' : '')) + '</h3>';
+    if (!q.pairs.length) {
+      return head + '<div class="note note-warn"><span aria-hidden="true">!</span> None of your snakes can produce ' + (q.targets.length > 1 ? 'these' : 'this') + ' yet. The Breeder’s catalogue on the Market sells carriers — and, once you have ' + U.money(SB.SHOWCASE_MIN_FUNDS) + ', showcase morphs.</div>' + btn('Go to Market', 'view', 'data-view="market"', 'btn-small btn-primary');
+    }
+    return head + '<ul class="pair-list">' + q.pairs.map(function (pr) {
+      return '<li class="pair-row"><div><strong>' + esc(pr.male.name) + ' × ' + esc(pr.female.name) + '</strong><div class="small muted">' + esc(pr.target) + '</div></div>' +
+        '<div class="pair-odds"><span class="pair-pct">' + G.pct(pr.prob) + '</span><span class="small muted">per egg</span></div>' +
+        '<div class="pair-actions">' + (pr.ready ? chip('good', 'Ready') : chip('warn', 'Not ready yet')) + btn('Preview', 'preview-pair', 'data-m="' + pr.male.id + '" data-f="' + pr.female.id + '"', 'btn-small') + '</div></li>';
+    }).join('') + '</ul>';
+  }
 
   ui.questDetail = function (state) {
     var g = sim.currentGoal(state);
@@ -170,6 +185,7 @@
     var reward = [g.reward.money ? U.money(g.reward.money) : '', g.reward.rep ? '+' + g.reward.rep + ' ★ reputation' : ''].filter(Boolean).join(' and ');
     return '<div class="quest-detail"><div class="quest-big-ring">' + ring(p, 96).replace('rgba(255,255,255,.18)', '#eadcbc') + '<span>' + Math.round(p * 100) + '%</span></div>' +
       '<div><p class="lead">' + esc(g.desc) + '</p><p><span class="reward-pill">Reward: ' + esc(reward) + '</span></p></div></div>' +
+      questPairsHTML(state, g) +
       '<h3>Quest line</h3><ol class="quest-line">' + SB.GOALS.map(function (q) {
         var done = state.goalsDone.indexOf(q.id) >= 0, cur = q === g;
         return '<li class="' + (done ? 'is-done' : cur ? 'is-current' : 'is-locked') + '"><span class="ql-dot" aria-hidden="true">' + (done ? '✓' : cur ? '●' : '🔒') + '</span><span>' + esc(q.title) + (done ? '<span class="sr-only"> (done)</span>' : cur ? '<span class="sr-only"> (current)</span>' : '<span class="sr-only"> (locked)</span>') + '</span></li>';
@@ -219,17 +235,22 @@
   ui.needs = function (state, s, e) {
     var out = [];
     if (sim.isUnrevealed(state, s)) return out;
-    if (s.health < 60) out.push({ icon: '🩺', action: 'vet', id: s.id, urgent: s.health < 40, label: 'Vet visit for ' + s.name + ' (' + U.money(SB.COSTS.vet) + ')' });
+    if (s.health < 60) out.push({ icon: '🩺', action: 'vet', id: s.id, urgent: s.health < 40, label: 'Vet visit for ' + s.name + ' (' + U.money(sim.vetCost(state)) + ')' });
+    if (e) {
+      // Habitat comes before routine care: only 4 bubbles fit on a tank, and
+      // routine care is what Chores already covers.
+      var t = U.rate(e.temp, CARE.temp), h = U.rate(e.humidity, CARE.humidity);
+      if (t.level !== 'good') out.push({ icon: '🌡️', action: 'fix-temp', id: e.id, urgent: t.level === 'bad', label: e.name + ' is ' + t.text.toLowerCase() + ' (' + e.temp + '°F). Reset the thermostat to 90°F' });
+      if (h.level !== 'good') out.push({ icon: e.humidity < CARE.humidity.ideal[0] ? '💦' : '🌬️', action: 'fix-hum', id: e.id, urgent: h.level === 'bad', label: (e.humidity < CARE.humidity.ideal[0] ? 'Mist ' : 'Ventilate ') + e.name + ' (humidity ' + e.humidity + '%)' });
+    }
     if (s.hunger >= 35) out.push({ icon: '🐭', action: 'feed', id: s.id, urgent: s.hunger > 80, label: 'Feed ' + s.name + ' (' + U.money(sim.feedCost(s)) + ')' });
     if (e) {
       if (e.water < 70) out.push({ icon: '💧', action: 'water', id: e.id, urgent: e.water < 40, label: 'Fresh water for ' + s.name });
       if (e.clean < 70) out.push({ icon: '🧽', action: 'clean', id: e.id, urgent: e.clean < 40, label: 'Clean ' + e.name + ' (' + U.money(SB.COSTS.cleanEnclosure) + ')' });
-      var t = U.rate(e.temp, CARE.temp), h = U.rate(e.humidity, CARE.humidity);
-      if (t.level !== 'good') out.push({ icon: '🌡️', action: 'fix-temp', id: e.id, urgent: t.level === 'bad', label: e.name + ' is ' + t.text.toLowerCase() + ' (' + e.temp + '°F). Reset the thermostat to 90°F' });
-      if (h.level !== 'good') out.push({ icon: e.humidity < CARE.humidity.ideal[0] ? '💦' : '🌬️', action: 'fix-hum', id: e.id, urgent: h.level === 'bad', label: (e.humidity < CARE.humidity.ideal[0] ? 'Mist ' : 'Ventilate ') + e.name + ' (humidity ' + e.humidity + '%)' });
       if (e.kind === 'tub' && s.weight > T.tubMaxWeight) out.push({ icon: '📦', action: 'open-snake', id: s.id, urgent: false, label: s.name + ' has outgrown this tub. Move to a bigger enclosure' });
     }
-    return out;
+    // Urgent needs first (stable), so the most pressing ones survive the cap.
+    return out.filter(function (n) { return n.urgent; }).concat(out.filter(function (n) { return !n.urgent; }));
   };
 
   ui.needCount = function (state) {
@@ -553,7 +574,7 @@
         '<section><h3>Condition</h3>' + meter('health', 'Health', s.health) + meter('stress', 'Stress', s.stress) + meter('hunger', 'Hunger', s.hunger) +
           '<div class="btn-row">' +
             btn('🐭 Feed (' + U.money(sim.feedCost(s)) + ')', 'feed', 'data-id="' + s.id + '"', 'btn-primary btn-small') +
-            btn('🩺 Vet visit (' + U.money(SB.COSTS.vet) + ')', 'vet', 'data-id="' + s.id + '"', 'btn-small') +
+            btn('🩺 Vet visit (' + U.money(sim.vetCost(state)) + ')', 'vet', 'data-id="' + s.id + '"', 'btn-small') +
             btn(s.keeper ? '★ Keeper (unmark)' : '☆ Mark as keeper', 'keeper', 'data-id="' + s.id + '" aria-pressed="' + s.keeper + '"', 'btn-small') +
           '</div>' +
           (proj ? '<p class="small">' + chip('info', proj.stage === 'pairing' ? 'In a pairing' : 'Gravid') + ' Part of the ' + esc(proj.maleName) + ' × ' + esc(proj.femaleName) + ' project.</p>' : '') +
@@ -580,7 +601,8 @@
         '</section>' +
         '<section><h3>Market</h3>' +
           (sell.ok ? '<p>Estimated sale price <strong>' + U.money(sim.value(state, s)) + '</strong>.</p>' + btn('Sell ' + esc(s.name) + '…', 'sell', 'data-id="' + s.id + '"', 'btn-small') :
-            '<p class="small">' + chip('warn', 'Not ready for a new home') + ' ' + esc(sell.reasons.join('; ')) + '.</p>') +
+            '<p class="small">' + chip('warn', 'Not ready for a new home') + ' ' + esc(sell.reasons.join('; ')) + '.</p>' +
+            (sim.canSurrender(state, s) ? '<p class="small muted">Out of options? Hillside Reptile Rescue takes any snake for a ' + U.money(sim.surrenderValue(state, s)) + ' rehoming grant (−1 reputation).</p>' + btn('Send to rescue…', 'surrender', 'data-id="' + s.id + '"', 'btn-small btn-ghost') : '')) +
         '</section>' +
       '</div></div>';
   };
@@ -753,6 +775,8 @@
     if (r.tier !== 'common') badges += '<span class="badge badge-' + r.tier + '"><span aria-hidden="true">' + (r.tier === 'jackpot' ? '✦' : '★') + '</span> ' + esc(r.text) + '</span>';
     if (isNew) badges += '<span class="badge badge-new"><span aria-hidden="true">✚</span> New morph!</span>';
     if (inBook) badges += '<span class="badge badge-book"><span aria-hidden="true">📘</span> Book sticker</span>';
+    var carries = sim.bookCarrierGenes(state, b);
+    if (carries.length) badges += '<span class="badge badge-keep" title="Possible carrier of a recessive you still need for the Morph Book. Keep and pair with another carrier."><span aria-hidden="true">🧬</span> Keep for ' + esc(carries.join(', ')) + '</span>';
     var celebrate = fresh && (r.tier !== 'common' || isNew);
     return '<li class="reveal-card tier-' + r.tier + (fresh ? ' is-fresh' : '') + (isNew ? ' is-new' : '') + '">' +
       (celebrate ? confetti(isNew && r.tier === 'common' ? 'rare' : r.tier) : '') +
@@ -887,16 +911,23 @@
           : '<p class="small">' + chip('warn', matches.length ? 'Your matching snakes aren’t ready to sell yet' : 'No matching snakes yet') + '</p>') + '</li>';
     }).join('');
 
+    var lowFunds = state.money < 60;
     var sellRows = state.snakes.filter(function (s) { return !sim.isUnrevealed(state, s); }).sort(function (a, b) { return (a.keeper ? 1 : 0) - (b.keeper ? 1 : 0) || a.name.localeCompare(b.name); }).map(function (s) {
       var c = sim.canSell(state, s);
-      return '<tr><th scope="row"><button type="button" class="link" data-action="open-snake" data-id="' + s.id + '">' + esc(s.name) + '</button>' + (s.keeper ? ' <span class="keeper">★<span class="sr-only"> keeper</span></span>' : '') + '<div class="small muted">' + (s.sex === 'M' ? '♂' : '♀') + ' ' + U.age(s.ageWeeks) + ' · ' + esc(G.fullLabel(s)) + '</div></th>' +
-        '<td>' + U.money(sim.value(state, s)) + '</td><td>' + (c.ok ? btn('Sell…', 'sell', 'data-id="' + s.id + '"', 'btn-small') : '<span class="small">' + chip('warn', 'Not yet') + '<span class="block muted">' + esc(c.reasons[0]) + '</span></span>') + '</td></tr>';
+      return '<tr><th scope="row"><button type="button" class="link" data-action="open-snake" data-id="' + s.id + '">' + esc(s.name) + '</button>' + (s.keeper ? ' <span class="keeper">★<span class="sr-only"> keeper</span></span>' : '') + '<div class="small muted">' + (s.sex === 'M' ? '♂' : '♀') + ' ' + U.age(s.ageWeeks) + ' · ' + esc(G.fullLabel(s)) + '</div>' +
+        (function () { var g = sim.bookCarrierGenes(state, s); return g.length ? '<span class="badge badge-keep">🧬 Keep for ' + esc(g.join(', ')) + '</span>' : ''; })() +
+        (function () { var g = sim.soleCarrierOf(state, s); return g.length ? ' <span class="badge badge-rare" title="No other snake in your collection carries this">Only ' + esc(g.join(', ')) + '</span>' : ''; })() + '</th>' +
+        '<td>' + U.money(sim.value(state, s)) + '</td><td>' + (c.ok ? btn('Sell…', 'sell', 'data-id="' + s.id + '"', 'btn-small') : '<span class="small">' + chip('warn', 'Not yet') + '<span class="block muted">' + esc(c.reasons[0]) + '</span></span>' +
+          (lowFunds && sim.canSurrender(state, s) ? btn('Rescue ' + U.money(sim.surrenderValue(state, s)), 'surrender', 'data-id="' + s.id + '"', 'btn-small btn-ghost') : '')) + '</td></tr>';
     }).join('');
 
-    var listings = mk.listings.map(function (l) {
+    var offer = function (l) {
       return '<li class="listing"><span class="pick-art">' + SB.art.snakeSVG(l.snake, { suffix: 'l', label: '' }) + '</span><div><strong>' + esc(l.snake.name) + '</strong> · ' + sexLabel(l.snake) + '<div class="small">' + U.age(l.snake.ageWeeks) + ' · ' + l.snake.weight + ' g</div>' + geneTags(l.snake) +
-        '<div class="small muted">From ' + esc(l.seller) + '</div><div class="btn-row">' + btn('Buy for ' + U.money(l.price), 'buy', 'data-id="' + l.id + '"', 'btn-small btn-primary') + '</div></div></li>';
-    }).join('');
+        '<div class="small muted">' + (l.showcase ? '<span class="badge badge-jackpot">Showcase</span> ' : '') + 'From ' + esc(l.seller) + (l.catalog ? ' · proven genetics' : '') + '</div><div class="btn-row">' + btn('Buy for ' + U.money(l.price), 'buy', 'data-id="' + l.id + '"', 'btn-small btn-primary') + '</div></div></li>';
+    };
+    var listings = mk.listings.map(offer).join('');
+    var catalog = (mk.catalog || []).map(offer).join('');
+    var restock = 8 - (state.week % 8);
 
     var trades = mk.trades.map(function (t) {
       var matches = state.snakes.filter(function (s) { return sim.matchesCriteria(state, s, t.criteria) && sim.canSell(state, s).ok; });
@@ -910,6 +941,7 @@
       '<section class="card" aria-labelledby="rq-h"><h2 id="rq-h">Buyer requests</h2><p class="small">Buyers pay a premium for exactly what they want and it boosts your reputation.</p>' + (requests ? '<ul class="request-list">' + requests + '</ul>' : empty('No requests right now', 'New buyers appear as the weeks go by.')) + '</section>' +
       '<section class="card" aria-labelledby="sell-h"><h2 id="sell-h">Sell to vetted buyers</h2><p class="small">Only healthy, feeding snakes go to new homes. Prices reflect proven genetics, age, sex, health and your reputation.</p>' +
         (sellRows ? '<div class="table-wrap"><table class="sell-table"><thead><tr><th scope="col">Snake</th><th scope="col">Value</th><th scope="col">Action</th></tr></thead><tbody>' + sellRows + '</tbody></table></div>' : empty('Nothing to sell', 'Your collection is empty.')) + '</section>' +
+      '<section class="card" aria-labelledby="cat-h"><h2 id="cat-h">Breeder’s catalogue</h2><p class="small">Proven adults from specialist breeders, carrying genes your starters don’t. Pricier than the open market. Restocks in ' + restock + ' week' + (restock === 1 ? '' : 's') + '.</p>' + (catalog ? '<ul class="listing-list">' + catalog + '</ul>' : empty('Sold out', 'New breeders arrive when the catalogue restocks.')) + '</section>' +
       '<section class="card" aria-labelledby="buy-h"><h2 id="buy-h">Snakes looking for a home</h2>' + (listings ? '<ul class="listing-list">' + listings + '</ul>' : empty('No listings', 'Sellers post new animals every few weeks.')) + '</section>' +
       '<section class="card" aria-labelledby="trade-h"><h2 id="trade-h">Trade offers</h2>' + (trades ? '<ul class="listing-list">' + trades + '</ul>' : empty('No trade offers', 'Traders sometimes appear — check back after a few weeks.')) + '</section>' +
       '</div>';

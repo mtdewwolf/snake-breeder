@@ -17,4 +17,4 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(data);
   });
-}).listen(port, () => console.log(`Scale & نسل is running at http://localhost:${port}`));
+}).listen(port, () => console.log(`Clutch & Coil is running at http://localhost:${port}`));
