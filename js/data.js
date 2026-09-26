@@ -220,6 +220,23 @@
     { genotype: { clown: 2 }, weight: 1 }
   ];
 
+  /*
+   * Showcase breeders: designer and super morphs offered as a fourth catalogue
+   * slot once the keeper has SHOWCASE_MIN_FUNDS. Expensive by design: a late-game
+   * money sink and a shortcut into the Designer and Super Forms pages.
+   */
+  SB.SHOWCASE_MIN_FUNDS = 3000;
+  SB.SHOWCASE = [
+    { genotype: { pastel: 1, clown: 2 } },
+    { genotype: { albino: 2, piebald: 2 } },
+    { genotype: { mojave: 1, clown: 2 } },
+    { genotype: { pastel: 2 } },
+    { genotype: { yellowbelly: 2 } },
+    { genotype: { pinstripe: 1, albino: 2 } },
+    { genotype: { pastel: 1, pinstripe: 1 } },
+    { genotype: { pastel: 1, clown: 1, piebald: 1 } }
+  ];
+
   /* Goals are checked in order; `check(state, SB)` returns a number 0..1 progress. */
   SB.GOALS = [
     { id: 'settle', title: 'Settle in', reward: { money: 50, rep: 1 },
@@ -229,6 +246,7 @@
       desc: 'Review a breeding preview and start a pairing between two eligible adults.',
       check: function (s) { return s.stats.pairings > 0 ? 1 : 0; } },
     { id: 'clown', title: 'Hatch a visual Clown', reward: { money: 300, rep: 5 },
+      targets: function () { return [{ name: 'Clown', genotype: { clown: 2 } }]; },
       desc: 'Pair two Clown carriers and incubate the clutch until a visual Clown hatches. (Biscuit × Marigold gives a 25% chance per egg.)',
       check: function (s) { return s.discoveries.some(function (d) { return d.genes && d.genes.indexOf('clown') >= 0; }) ? 1 : 0; } },
     { id: 'request', title: 'Fill a buyer request', reward: { money: 100, rep: 3 },
@@ -238,6 +256,7 @@
       desc: 'Own at least 12 enclosures so you have room for future clutches.',
       check: function (s) { return Math.min(1, s.enclosures.length / 12); } },
     { id: 'pastelClown', title: 'Produce a Pastel Clown', reward: { money: 400, rep: 6 },
+      targets: function () { return [{ name: 'Pastel Clown', genotype: { pastel: 1, clown: 2 } }]; },
       desc: 'Combine a codominant and a recessive gene in one animal.',
       check: function (s) { return s.discoveries.some(function (d) { return d.label === 'Pastel Clown'; }) ? 1 : 0; } },
     { id: 'renowned', title: 'Respected keeper', reward: { money: 500, rep: 0 },
@@ -248,18 +267,22 @@
       desc: 'Your starters only carry a few genes. Buy a breeder carrying Yellow Belly, Mojave or Piebald from the Breeder’s catalogue on the Market. Adults need an adult enclosure, so buy one in the Shop first.',
       check: function (s) { return s.snakes.some(function (x) { return x.origin === 'Bought' && ['yellowbelly', 'mojave', 'piebald'].some(function (g) { return SB.genetics.carryProb(x, g) >= 0.99; }); }) || (s.stats.boughtNewGenes || 0) > 0 ? 1 : 0; } },
     { id: 'classics', title: 'Complete The Classics', reward: { money: 300, rep: 3 },
+      targets: function (s) { return SB.sim.openSlots(s, SB.BOOK[0]); },
       desc: 'Fill every sticker on the first Morph Book page. Tap an empty sticker to see which pairings could produce it. For recessives like Piebald, keep the hatchlings marked 🧬 (possible carriers) and pair them with another carrier.',
       check: function (s) { var pg = SB.BOOK[0]; return pg.slots.filter(function (sl) { return SB.sim.slotDiscovery(s, sl); }).length / pg.slots.length; } },
     { id: 'super', title: 'Double up', reward: { money: 400, rep: 4 },
+      targets: function (s) { return SB.sim.openSlots(s, SB.BOOK[1]); },
       desc: 'Hatch a super form: pair two carriers of the same incomplete-dominant gene (e.g. Pastel × Pastel for a Super Pastel).',
       check: function (s) { return s.discoveries.some(function (d) { return ['Super Pastel', 'Ivory', 'Blue-Eyed Leucistic'].indexOf(d.label) >= 0; }) ? 1 : 0; } },
     { id: 'display', title: 'Open to the public', reward: { money: 0, rep: 5 },
       desc: 'Install a public display vivarium from the Shop so visitors can see your work.',
       check: function (s) { return s.upgrades.display ? 1 : 0; } },
     { id: 'designer', title: 'Designer collection', reward: { money: 1000, rep: 6 },
+      targets: function (s) { return SB.sim.openSlots(s, SB.BOOK[2]); },
       desc: 'Complete the Designer Combos page of the Morph Book.',
       check: function (s) { var pg = SB.BOOK[2]; return pg.slots.filter(function (sl) { return SB.sim.slotDiscovery(s, sl); }).length / pg.slots.length; } },
     { id: 'master', title: 'Master breeder', reward: { money: 2500, rep: 10 },
+      targets: function (s) { var out = []; SB.BOOK.forEach(function (pg) { out = out.concat(SB.sim.openSlots(s, pg)); }); return out; },
       desc: 'Fill every sticker in the Morph Book and reach 150 reputation.',
       check: function (s) {
         var tot = 0, got = 0;

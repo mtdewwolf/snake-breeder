@@ -163,6 +163,21 @@
       '<span class="quest-text"><span class="quest-label">Quest ' + (SB.GOALS.indexOf(g) + 1) + '/' + SB.GOALS.length + '</span><span class="quest-title">' + esc(g.title) + '</span></span></button>';
   };
 
+  /* "How to get there": the best pairings in the collection for a quest's target morphs. */
+  function questPairsHTML(state, g) {
+    var q = sim.questPairs(state, g);
+    if (!q || !q.targets.length) return '';
+    var head = '<h3>Best pairings for ' + esc(q.targets.slice(0, 3).join(', ') + (q.targets.length > 3 ? '…' : '')) + '</h3>';
+    if (!q.pairs.length) {
+      return head + '<div class="note note-warn"><span aria-hidden="true">!</span> None of your snakes can produce ' + (q.targets.length > 1 ? 'these' : 'this') + ' yet. The Breeder’s catalogue on the Market sells carriers — and, once you have ' + U.money(SB.SHOWCASE_MIN_FUNDS) + ', showcase morphs.</div>' + btn('Go to Market', 'view', 'data-view="market"', 'btn-small btn-primary');
+    }
+    return head + '<ul class="pair-list">' + q.pairs.map(function (pr) {
+      return '<li class="pair-row"><div><strong>' + esc(pr.male.name) + ' × ' + esc(pr.female.name) + '</strong><div class="small muted">' + esc(pr.target) + '</div></div>' +
+        '<div class="pair-odds"><span class="pair-pct">' + G.pct(pr.prob) + '</span><span class="small muted">per egg</span></div>' +
+        '<div class="pair-actions">' + (pr.ready ? chip('good', 'Ready') : chip('warn', 'Not ready yet')) + btn('Preview', 'preview-pair', 'data-m="' + pr.male.id + '" data-f="' + pr.female.id + '"', 'btn-small') + '</div></li>';
+    }).join('') + '</ul>';
+  }
+
   ui.questDetail = function (state) {
     var g = sim.currentGoal(state);
     if (!g) return '<p>You’ve completed every quest. Keep filling your Morph Book!</p>' + btn('Open Morph Book', 'view', 'data-view="book"', 'btn-primary');
@@ -170,6 +185,7 @@
     var reward = [g.reward.money ? U.money(g.reward.money) : '', g.reward.rep ? '+' + g.reward.rep + ' ★ reputation' : ''].filter(Boolean).join(' and ');
     return '<div class="quest-detail"><div class="quest-big-ring">' + ring(p, 96).replace('rgba(255,255,255,.18)', '#eadcbc') + '<span>' + Math.round(p * 100) + '%</span></div>' +
       '<div><p class="lead">' + esc(g.desc) + '</p><p><span class="reward-pill">Reward: ' + esc(reward) + '</span></p></div></div>' +
+      questPairsHTML(state, g) +
       '<h3>Quest line</h3><ol class="quest-line">' + SB.GOALS.map(function (q) {
         var done = state.goalsDone.indexOf(q.id) >= 0, cur = q === g;
         return '<li class="' + (done ? 'is-done' : cur ? 'is-current' : 'is-locked') + '"><span class="ql-dot" aria-hidden="true">' + (done ? '✓' : cur ? '●' : '🔒') + '</span><span>' + esc(q.title) + (done ? '<span class="sr-only"> (done)</span>' : cur ? '<span class="sr-only"> (current)</span>' : '<span class="sr-only"> (locked)</span>') + '</span></li>';
@@ -907,7 +923,7 @@
 
     var offer = function (l) {
       return '<li class="listing"><span class="pick-art">' + SB.art.snakeSVG(l.snake, { suffix: 'l', label: '' }) + '</span><div><strong>' + esc(l.snake.name) + '</strong> · ' + sexLabel(l.snake) + '<div class="small">' + U.age(l.snake.ageWeeks) + ' · ' + l.snake.weight + ' g</div>' + geneTags(l.snake) +
-        '<div class="small muted">From ' + esc(l.seller) + (l.catalog ? ' · proven genetics' : '') + '</div><div class="btn-row">' + btn('Buy for ' + U.money(l.price), 'buy', 'data-id="' + l.id + '"', 'btn-small btn-primary') + '</div></div></li>';
+        '<div class="small muted">' + (l.showcase ? '<span class="badge badge-jackpot">Showcase</span> ' : '') + 'From ' + esc(l.seller) + (l.catalog ? ' · proven genetics' : '') + '</div><div class="btn-row">' + btn('Buy for ' + U.money(l.price), 'buy', 'data-id="' + l.id + '"', 'btn-small btn-primary') + '</div></div></li>';
     };
     var listings = mk.listings.map(offer).join('');
     var catalog = (mk.catalog || []).map(offer).join('');

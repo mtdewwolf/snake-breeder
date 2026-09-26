@@ -254,3 +254,43 @@ test('quests complete out of order and low funds suggest a safe sale', () => {
   assert.ok(pick, 'something is suggested');
   assert.deepStrictEqual(sim.soleCarrierOf(state, pick), [], 'never suggests the only carrier when a safer snake exists: ' + pick.name);
 });
+
+test('catalogue treats Mojave as new even when Lesser is owned', () => {
+  const orig = G.rng;
+  G.rng = seeded(21);
+  try {
+    let moj = 0, runs = 200;
+    for (let i = 0; i < runs; i++) {
+      const state = SB.state.newGame();
+      const les = SB.state.makeSnake(state, { genotype: { lesser: 1 }, sex: 'F', ageWeeks: 150, weight: 1700 });
+      state.snakes.push(les);
+      state.week = 8;
+      sim.refreshMarket(state, false);
+      if (state.market.catalog.some((l) => G.copies(l.snake.genotype, 'mojave') > 0)) moj++;
+    }
+    assert.ok(moj / runs > 0.3, 'Mojave still offered often: ' + moj + '/' + runs);
+  } finally { G.rng = orig; }
+});
+
+test('showcase breeders appear for rich keepers and are pricey', () => {
+  const state = SB.state.newGame();
+  state.week = 8; state.money = 500;
+  sim.refreshMarket(state, false);
+  assert.ok(!state.market.catalog.some((l) => l.showcase), 'no showcase when poor');
+  state.week = 16; state.money = 10000;
+  sim.refreshMarket(state, false);
+  const show = state.market.catalog.find((l) => l.showcase);
+  assert.ok(show, 'showcase offered when rich');
+  assert.ok(G.visualForms(show.snake.genotype).length >= 1 && show.price >= 900, 'showcase is a designer/super morph at a premium: ' + show.price);
+});
+
+test('quest window suggests pairings for the target morph', () => {
+  const state = SB.state.newGame();
+  const q = sim.questPairs(state, SB.GOALS.find((g) => g.id === 'pastelClown'));
+  assert.deepStrictEqual(q.targets, ['Pastel Clown']);
+  assert.ok(q.pairs.some((p) => p.male.name === 'Biscuit' && p.female.name === 'Marigold'));
+  const sup = sim.questPairs(state, SB.GOALS.find((g) => g.id === 'super'));
+  assert.ok(sup.targets.length === 3);
+  state.goalsDone = SB.GOALS.slice(0, 5).map((g) => g.id).concat(['clown']);
+  assert.ok(ui.questDetail(state).includes('Best pairings for'));
+});

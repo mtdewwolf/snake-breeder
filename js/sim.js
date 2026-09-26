@@ -622,6 +622,22 @@
     return pool[0] || null;
   };
 
+  /* Morph Book slots on a page that are still empty, as { name, genotype }. */
+  sim.openSlots = function (state, page) {
+    return page.slots.filter(function (sl) { return !sim.slotDiscovery(state, sl); });
+  };
+
+  /* Best pairings in the collection for any of a quest's target morphs. */
+  sim.questPairs = function (state, goal) {
+    if (!goal || !goal.targets) return null;
+    var out = [];
+    goal.targets(state).forEach(function (t) {
+      sim.pairsFor(state, t.genotype).forEach(function (pr) { out.push({ target: t.name, male: pr.male, female: pr.female, prob: pr.prob, ready: pr.ready }); });
+    });
+    out.sort(function (a, b) { return (b.ready - a.ready) || (b.prob - a.prob); });
+    return { targets: goal.targets(state).map(function (t) { return t.name; }), pairs: out.slice(0, 4) };
+  };
+
   /* Weekly running costs: feeding (about every other week for adults) and upkeep. */
   sim.weeklyCosts = function (state) {
     var feed = state.snakes.reduce(function (t, s) { return t + (sim.isJuvenile(s) ? C.feedJuvenile : C.feedAdult / 2); }, 0);
@@ -699,15 +715,32 @@
    * lacks, and a second carrier of an incomplete-dominant gene when the keeper
    * owns just one (a super form needs two unrelated carriers).
    */
-  function makeCatalogOffer(state, taken) {
+  /* How many snakes carry each gene (by gene id, so Mojave and Lesser count separately). */
+  function carriersByGene(state) {
     var have = {};
-    state.snakes.forEach(function (x) { G.activeLoci(G.norm(x.genotype)).forEach(function (L) { have[L] = (have[L] || 0) + 1; }); });
-    var pool = SB.CATALOG.map(function (c) {
-      var geno = G.norm(c.genotype), loci = Object.keys(geno);
-      var fresh = loci.some(function (L) { return !have[L]; });
-      var pairUp = loci.some(function (L) { return have[L] === 1 && geno[L].some(function (a) { return a && G.gene(a).type === 'codominant'; }); });
-      return { c: c, w: (c.weight || 1) * (fresh || pairUp ? 3 : 1) * (taken[JSON.stringify(c.genotype)] ? 0 : 1) };
+    state.snakes.forEach(function (x) {
+      SB.GENES.forEach(function (g) { if (G.carryProb(x, g.id) > 0) have[g.id] = (have[g.id] || 0) + 1; });
+    });
+    return have;
+  }
+  function genesOf(genotype) {
+    var out = [], geno = G.norm(genotype);
+    Object.keys(geno).forEach(function (L) { geno[L].forEach(function (a) { if (a && out.indexOf(a) < 0) out.push(a); }); });
+    return out;
+  }
+
+  function makeCatalogOffer(state, taken, list, markup) {
+    var have = carriersByGene(state);
+    var pool = (list || SB.CATALOG).map(function (c) {
+      var genes = genesOf(c.genotype);
+      var fresh = genes.some(function (g) { return !have[g]; });
+      var pairUp = genes.some(function (g) { return have[g] === 1 && G.gene(g).type === 'codominant'; });
+      // Showcase morphs the Morph Book still lacks are the most useful.
+      var slot = sim.bookSlotFor(G.morphLabel(c.genotype));
+      var needed = slot && !sim.slotDiscovery(state, slot.slot);
+      return { c: c, w: (c.weight || 1) * (fresh || pairUp ? 3 : 1) * (needed ? 2 : 1) * (taken[JSON.stringify(c.genotype)] ? 0 : 1) };
     }).filter(function (x) { return x.w > 0; });
+    if (!pool.length) return null;
     var total = pool.reduce(function (t, x) { return t + x.w; }, 0), r = U.rand() * total, pick = pool[0];
     for (var i = 0; i < pool.length; i++) { r -= pool[i].w; if (r < 0) { pick = pool[i]; break; } }
     taken[JSON.stringify(pick.c.genotype)] = true;
@@ -721,13 +754,17 @@
       weight: sex === 'F' ? U.randInt(1600, 2000) : U.randInt(800, 1150),
       health: U.randInt(92, 100), stress: U.randInt(10, 20), hunger: 20, origin: 'Bought', mealsEaten: 20
     });
-    return { id: SB.state.nextId(state, 'ct'), seller: U.pick(['Tomas (morph collector)', 'Mei (breeder, two towns over)', 'The Coil Club']), snake: snake, price: Math.round(sim.value(state, snake) / sim.priceMultiplier(state) * 1.6 / 5) * 5, catalog: true };
+    return { id: SB.state.nextId(state, 'ct'), seller: U.pick(['Tomas (morph collector)', 'Mei (breeder, two towns over)', 'The Coil Club']), snake: snake, price: Math.round(sim.value(state, snake) / sim.priceMultiplier(state) * (markup || 1.6) / 5) * 5, catalog: true, showcase: !!list };
   }
 
   function restockCatalog(state) {
     var taken = {};
     state.market.catalog = [];
     for (var i = 0; i < 3; i++) state.market.catalog.push(makeCatalogOffer(state, taken));
+    if (state.money >= SB.SHOWCASE_MIN_FUNDS) {
+      var show = makeCatalogOffer(state, taken, SB.SHOWCASE, 3.5);
+      if (show) state.market.catalog.push(show);
+    }
   }
 
   function makeRequest(state) {
