@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.ScaleAndNasl" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.ClutchAndCoil" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/wall</item>
         <item name="android:colorAccent">@color/gold</item>
         <item name="android:colorPrimary">@color/moss</item>
     </style>
 
-    <style name="Theme.ScaleAndNasl.Starting" parent="Theme.SplashScreen">
+    <style name="Theme.ClutchAndCoil.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/wall</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="windowSplashScreenIconBackgroundColor">@color/moss</item>
-        <item name="postSplashScreenTheme">@style/Theme.ScaleAndNasl</item>
+        <item name="postSplashScreenTheme">@style/Theme.ClutchAndCoil</item>
     </style>
 </resources>

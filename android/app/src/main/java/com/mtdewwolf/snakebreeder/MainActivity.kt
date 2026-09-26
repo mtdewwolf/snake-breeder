@@ -27,7 +27,7 @@ import androidx.webkit.WebViewAssetLoader
 import java.io.ByteArrayInputStream
 
 /**
- * Hosts the Scale & نسل game. The game is the exact HTML/CSS/JS from the repository root,
+ * Hosts the Clutch & Coil game. The game is the exact HTML/CSS/JS from the repository root,
  * bundled into the APK and served from https://appassets.androidplatform.net so that
  * localStorage saves, fonts and layout behave exactly as in the browser, fully offline.
  */

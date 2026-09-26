@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ScaleAndNasl"
+rootProject.name = "ClutchAndCoil"
 include(":app")
