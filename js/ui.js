@@ -759,6 +759,8 @@
     if (r.tier !== 'common') badges += '<span class="badge badge-' + r.tier + '"><span aria-hidden="true">' + (r.tier === 'jackpot' ? '✦' : '★') + '</span> ' + esc(r.text) + '</span>';
     if (isNew) badges += '<span class="badge badge-new"><span aria-hidden="true">✚</span> New morph!</span>';
     if (inBook) badges += '<span class="badge badge-book"><span aria-hidden="true">📘</span> Book sticker</span>';
+    var carries = sim.bookCarrierGenes(state, b);
+    if (carries.length) badges += '<span class="badge badge-keep" title="Possible carrier of a recessive you still need for the Morph Book. Keep and pair with another carrier."><span aria-hidden="true">🧬</span> Keep for ' + esc(carries.join(', ')) + '</span>';
     var celebrate = fresh && (r.tier !== 'common' || isNew);
     return '<li class="reveal-card tier-' + r.tier + (fresh ? ' is-fresh' : '') + (isNew ? ' is-new' : '') + '">' +
       (celebrate ? confetti(isNew && r.tier === 'common' ? 'rare' : r.tier) : '') +
@@ -896,7 +898,8 @@
     var lowFunds = state.money < 60;
     var sellRows = state.snakes.filter(function (s) { return !sim.isUnrevealed(state, s); }).sort(function (a, b) { return (a.keeper ? 1 : 0) - (b.keeper ? 1 : 0) || a.name.localeCompare(b.name); }).map(function (s) {
       var c = sim.canSell(state, s);
-      return '<tr><th scope="row"><button type="button" class="link" data-action="open-snake" data-id="' + s.id + '">' + esc(s.name) + '</button>' + (s.keeper ? ' <span class="keeper">★<span class="sr-only"> keeper</span></span>' : '') + '<div class="small muted">' + (s.sex === 'M' ? '♂' : '♀') + ' ' + U.age(s.ageWeeks) + ' · ' + esc(G.fullLabel(s)) + '</div></th>' +
+      return '<tr><th scope="row"><button type="button" class="link" data-action="open-snake" data-id="' + s.id + '">' + esc(s.name) + '</button>' + (s.keeper ? ' <span class="keeper">★<span class="sr-only"> keeper</span></span>' : '') + '<div class="small muted">' + (s.sex === 'M' ? '♂' : '♀') + ' ' + U.age(s.ageWeeks) + ' · ' + esc(G.fullLabel(s)) + '</div>' +
+        (function () { var g = sim.bookCarrierGenes(state, s); return g.length ? '<span class="badge badge-keep">🧬 Keep for ' + esc(g.join(', ')) + '</span>' : ''; })() + '</th>' +
         '<td>' + U.money(sim.value(state, s)) + '</td><td>' + (c.ok ? btn('Sell…', 'sell', 'data-id="' + s.id + '"', 'btn-small') : '<span class="small">' + chip('warn', 'Not yet') + '<span class="block muted">' + esc(c.reasons[0]) + '</span></span>' +
           (lowFunds && sim.canSurrender(state, s) ? btn('Rescue ' + U.money(sim.surrenderValue(state, s)), 'surrender', 'data-id="' + s.id + '"', 'btn-small btn-ghost') : '')) + '</td></tr>';
     }).join('');

@@ -248,7 +248,7 @@
       desc: 'Your starters only carry a few genes. Buy a breeder carrying Yellow Belly, Mojave or Piebald from the Breeder’s catalogue on the Market. Adults need an adult enclosure, so buy one in the Shop first.',
       check: function (s) { return s.snakes.some(function (x) { return x.origin === 'Bought' && ['yellowbelly', 'mojave', 'piebald'].some(function (g) { return SB.genetics.carryProb(x, g) >= 0.99; }); }) || (s.stats.boughtNewGenes || 0) > 0 ? 1 : 0; } },
     { id: 'classics', title: 'Complete The Classics', reward: { money: 300, rep: 3 },
-      desc: 'Fill every sticker on the first Morph Book page. Tap an empty sticker in the Book to see which of your snakes could produce it.',
+      desc: 'Fill every sticker on the first Morph Book page. Tap an empty sticker to see which pairings could produce it. For recessives like Piebald, keep the hatchlings marked 🧬 (possible carriers) and pair them with another carrier.',
       check: function (s) { var pg = SB.BOOK[0]; return pg.slots.filter(function (sl) { return SB.sim.slotDiscovery(s, sl); }).length / pg.slots.length; } },
     { id: 'super', title: 'Double up', reward: { money: 400, rep: 4 },
       desc: 'Hatch a super form: pair two carriers of the same incomplete-dominant gene (e.g. Pastel × Pastel for a Super Pastel).',

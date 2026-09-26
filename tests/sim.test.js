@@ -232,3 +232,14 @@ test('catalogue offers the sex the collection is short of', () => {
     assert.ok(f / n > 0.65, 'mostly females offered to an all-male collection: ' + f + '/' + n);
   } finally { G.rng = orig; }
 });
+
+test('warnings for sole carriers, Morph Book carriers and running costs', () => {
+  const state = SB.state.newGame();
+  const juniper = state.snakes.find((s) => s.name === 'Juniper');
+  assert.deepStrictEqual(sim.soleCarrierOf(state, juniper), ['Pinstripe'], 'only Pinstripe is unique to Juniper (Pepper carries Albino)');
+  const baby = SB.state.makeSnake(state, { genotype: {}, knowledge: { piebald: [0.34, 0.66, 0] }, origin: 'Hatched' });
+  state.snakes.push(baby);
+  assert.deepStrictEqual(sim.bookCarrierGenes(state, baby), ['Piebald']);
+  assert.ok(sim.weeklyCosts(state) > 5 && sim.weeklyCosts(state) < 40);
+  ui.market(state); // renders the keep badge without errors
+});

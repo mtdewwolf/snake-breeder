@@ -586,6 +586,36 @@
     return out.sort(function (a, b) { return (b.ready - a.ready) || (b.prob - a.prob); }).slice(0, 4);
   };
 
+  /* Genes (by locus name) that this snake carries and no other snake in the collection does. */
+  sim.soleCarrierOf = function (state, snake) {
+    var out = [];
+    G.activeLoci(G.know(snake), G.norm(snake.genotype)).forEach(function (L) {
+      var genes = G.locus(L).alleles;
+      genes.forEach(function (g) {
+        if (G.carryProb(snake, g.id) < 0.5) return;
+        var other = state.snakes.some(function (o) { return o.id !== snake.id && G.carryProb(o, g.id) > 0; });
+        if (!other) out.push(g.name);
+      });
+    });
+    return out;
+  };
+
+  /* Recessive genes this hatchling (possibly) carries whose visual Morph Book sticker is still empty. */
+  sim.bookCarrierGenes = function (state, snake) {
+    return G.carrierNotes(snake).filter(function (n) {
+      if (!n.gene || G.gene(n.gene).type !== 'recessive') return false;
+      var want = {}; want[n.gene] = 2;
+      var slot = sim.bookSlotFor(G.morphLabel(want));
+      return slot && !sim.slotDiscovery(state, slot.slot);
+    }).map(function (n) { return G.gene(n.gene).name; });
+  };
+
+  /* Weekly running costs: feeding (about every other week for adults) and upkeep. */
+  sim.weeklyCosts = function (state) {
+    var feed = state.snakes.reduce(function (t, s) { return t + (sim.isJuvenile(s) ? C.feedJuvenile : C.feedAdult / 2); }, 0);
+    return Math.max(1, Math.round(feed + state.enclosures.length * C.upkeepPerEnclosure + state.incubators.length + 2));
+  };
+
   /* ---------- Market ---------- */
 
   sim.matchesCriteria = function (state, snake, c) {

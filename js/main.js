@@ -237,6 +237,17 @@
     }
   }
 
+  /* Warning text when a snake is the collection's only carrier of some gene. */
+  function soleWarning(s) {
+    var genes = sim.soleCarrierOf(state, s);
+    return genes.length ? ' <strong>' + U.esc(s.name) + ' is your only carrier of ' + U.esc(genes.join(', ')) + '</strong> — without it you’ll need the Market to get ' + (genes.length > 1 ? 'them' : 'it') + ' back.' : '';
+  }
+  /* How long money lasts after spending `cost`. */
+  function runwayNote(cost) {
+    var left = state.money - cost, weeks = Math.floor(left / sim.weeklyCosts(state));
+    return ' That leaves ' + U.money(left) + (weeks < 8 ? ' — <strong>only about ' + Math.max(0, weeks) + ' week' + (weeks === 1 ? '' : 's') + ' of running costs</strong>.' : ' (about ' + Math.min(weeks, 99) + (weeks > 99 ? '+' : '') + ' weeks of running costs).');
+  }
+
   function sellFlow(id, requestId) {
     var s = sim.snake(state, id);
     if (!s) return;
@@ -245,7 +256,7 @@
     if (req) price = Math.round(price * req.bonus / 5) * 5;
     confirmAction({
       title: 'Find a new home for ' + s.name + '?',
-      html: U.esc(s.name) + ' (' + U.esc(SB.genetics.fullLabel(s)) + ') will go to ' + U.esc(req ? req.buyer : 'a vetted buyer') + ' for <strong>' + U.money(price) + '</strong>.' + (s.keeper ? ' <strong>You marked this snake as a keeper.</strong>' : '') + ' This can’t be undone.',
+      html: U.esc(s.name) + ' (' + U.esc(SB.genetics.fullLabel(s)) + ') will go to ' + U.esc(req ? req.buyer : 'a vetted buyer') + ' for <strong>' + U.money(price) + '</strong>.' + (s.keeper ? ' <strong>You marked this snake as a keeper.</strong>' : '') + soleWarning(s) + ' This can’t be undone.',
       yes: 'Sell for ' + U.money(price)
     }, function () { act(function () { return sim.sell(state, id, requestId); }); });
   }
@@ -269,7 +280,7 @@
     'surrender': function (el) {
       var s = sim.snake(state, el.dataset.id);
       if (!s) return;
-      confirmAction({ title: 'Send ' + s.name + ' to the rescue?', html: 'Hillside Reptile Rescue will rehome <strong>' + U.esc(s.name) + '</strong> and pay a <strong>' + U.money(sim.surrenderValue(state, s)) + '</strong> grant. You lose 1 reputation. This can’t be undone.', yes: 'Send to rescue', danger: true },
+      confirmAction({ title: 'Send ' + s.name + ' to the rescue?', html: 'Hillside Reptile Rescue will rehome <strong>' + U.esc(s.name) + '</strong> and pay a <strong>' + U.money(sim.surrenderValue(state, s)) + '</strong> grant. You lose 1 reputation.' + soleWarning(s) + ' This can’t be undone.', yes: 'Send to rescue', danger: true },
         function () { act(function () { return sim.surrender(state, s.id); }); });
     },
     'filter': function (el) { uis.filter = el.dataset.filter; uis.query = ''; persist(); render(); },
@@ -336,7 +347,7 @@
     'buy': function (el) {
       var l = sim.findOffer(state, el.dataset.id);
       if (!l) return;
-      confirmAction({ title: 'Welcome ' + l.snake.name + '?', html: 'Buy ' + U.esc(l.snake.name) + ' (' + U.esc(SB.genetics.fullLabel(l.snake)) + ') for <strong>' + U.money(l.price) + '</strong>? They’ll need a free enclosure.', yes: 'Buy for ' + U.money(l.price) },
+      confirmAction({ title: 'Welcome ' + l.snake.name + '?', html: 'Buy ' + U.esc(l.snake.name) + ' (' + U.esc(SB.genetics.fullLabel(l.snake)) + ') for <strong>' + U.money(l.price) + '</strong>? They’ll need a free ' + (l.snake.weight > SB.TIMING.tubMaxWeight ? 'adult enclosure' : 'enclosure') + '.' + runwayNote(l.price), yes: 'Buy for ' + U.money(l.price) },
         function () { act(function () { return sim.buy(state, l.id); }); });
     },
     'buy-upgrade': function (el) { act(function () { return sim.buyUpgrade(state, el.dataset.id); }); },
@@ -419,7 +430,7 @@
       var t = state.market.trades.find(function (x) { return x.id === form.dataset.id; });
       var s = sim.snake(state, data.get('snake'));
       if (!t || !s) return;
-      confirmAction({ title: 'Confirm trade', html: 'Trade <strong>' + U.esc(s.name) + '</strong> to ' + U.esc(t.trader) + ' for <strong>' + U.esc(t.snake.name) + '</strong> (' + U.esc(SB.genetics.fullLabel(t.snake)) + ')?', yes: 'Trade' },
+      confirmAction({ title: 'Confirm trade', html: 'Trade <strong>' + U.esc(s.name) + '</strong> to ' + U.esc(t.trader) + ' for <strong>' + U.esc(t.snake.name) + '</strong> (' + U.esc(SB.genetics.fullLabel(t.snake)) + ')?' + soleWarning(s), yes: 'Trade' },
         function () { act(function () { return sim.trade(state, t.id, s.id); }); });
     }
   });
