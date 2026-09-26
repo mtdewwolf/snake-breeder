@@ -216,3 +216,19 @@ test('catalogue leans toward a second carrier for super forms', () => {
     assert.ok(pastel / runs > 0.2, 'a Pastel partner shows up often: ' + pastel + '/' + runs);
   } finally { G.rng = orig; }
 });
+
+test('catalogue offers the sex the collection is short of', () => {
+  const orig = G.rng;
+  G.rng = seeded(11);
+  try {
+    let f = 0, n = 0;
+    for (let i = 0; i < 100; i++) {
+      const state = SB.state.newGame();
+      state.snakes.forEach((s) => { s.sex = 'M'; });
+      state.week = 8;
+      sim.refreshMarket(state, false);
+      state.market.catalog.forEach((l) => { n++; if (l.snake.sex === 'F') f++; });
+    }
+    assert.ok(f / n > 0.65, 'mostly females offered to an all-male collection: ' + f + '/' + n);
+  } finally { G.rng = orig; }
+});

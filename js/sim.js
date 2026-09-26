@@ -669,7 +669,11 @@
     var total = pool.reduce(function (t, x) { return t + x.w; }, 0), r = U.rand() * total, pick = pool[0];
     for (var i = 0; i < pool.length; i++) { r -= pool[i].w; if (r < 0) { pick = pool[i]; break; } }
     taken[JSON.stringify(pick.c.genotype)] = true;
-    var sex = U.rand() < 0.55 ? 'F' : 'M';
+    // Lean toward whichever sex the keeper's adults are short of.
+    var adults = state.snakes.filter(function (x) { return !sim.isJuvenile(x); });
+    var males = adults.filter(function (x) { return x.sex === 'M'; }).length, females = adults.length - males;
+    var pF = males > females ? 0.8 : females > males ? 0.3 : 0.55;
+    var sex = U.rand() < pF ? 'F' : 'M';
     var snake = SB.state.makeSnake(state, {
       genotype: pick.c.genotype, sex: sex, ageWeeks: U.randInt(110, 180),
       weight: sex === 'F' ? U.randInt(1600, 2000) : U.randInt(800, 1150),
