@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The game draws edge to edge; the two bars are painted in the HUD and dock colours so the
+     status and navigation bars look like part of the game. Heights are set from window insets. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/wall"
+    android:orientation="vertical">
+
+    <View
+        android:id="@+id/status_bar_bg"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="@color/hud_top" />
+
+    <WebView
+        android:id="@+id/game"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@color/wall" />
+
+    <View
+        android:id="@+id/nav_bar_bg"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="@color/wood_dark" />
+</LinearLayout>

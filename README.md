@@ -11,6 +11,27 @@ npm test         # genetics, save-migration and long-run game-loop tests (Node 1
 
 You can also open `index.html` directly in a browser. Progress saves automatically to `localStorage`; use **New game…** in the footer to reset.
 
+## Android app
+
+`android/` is a native Android app (Kotlin) that runs this exact game. At build time Gradle copies `index.html`, `css/` and `js/` from the repository root into the APK, so the app always matches the browser version, with no second copy to keep in sync. A `WebView` serves the files from `https://appassets.androidplatform.net`, so saves use `localStorage` just as in the browser.
+
+What the app adds:
+
+- Works offline: the Lilita One and Nunito fonts are bundled (`android/app/src/main/assets/fonts/`, SIL OFL), and any other network request is blocked.
+- The status and navigation bars are painted in the HUD and dock wood colours, and the game is kept clear of notches and the keyboard.
+- Back closes an open dialog, then returns to the Room, then sends the app to the background.
+- Splash screen and launcher icon from the brand mark; saves are included in Android backup.
+
+Build it with JDK 17+ and the Android SDK (platform 35):
+
+```bash
+cd android
+./gradlew assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease    # minified; signed with the debug key until you add your own signingConfig
+```
+
+Or open `android/` in Android Studio. The **Android** GitHub Actions workflow builds both APKs on every change to the game or app and uploads them as a build artifact.
+
 ## How to play
 
 1. Start in the **Room**: each tank shows its snake, and bubbles above it flag needs (tap a bubble to feed, water, clean or fix the habitat).
@@ -30,6 +51,7 @@ You can also open `index.html` directly in a browser. Progress saves automatical
 | `js/state.js` | New-game setup and save/load |
 | `js/art.js` | Original SVG snake illustrations: tapered coiled body, morph-specific patterns, shading and head detail, all generated from gene `art` data |
 | `js/ui.js`, `js/main.js` | Rendering (reptile room, HUD, dock, dialogs) and event wiring, including floating numbers and the weekly recap |
+| `android/` | Native Android app that packages the game (see [Android app](#android-app)) |
 
 To add a morph, see [Adding content](#adding-content) below — everything is data in `js/data.js`.
 

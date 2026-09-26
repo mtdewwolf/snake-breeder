@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors the tokens in css/styles.css so the system bars blend into the game. -->
+    <color name="wall">#1C2A19</color>          <!-- wall token: page background -->
+    <color name="hud_top">#74502B</color>       <!-- top of the .hud gradient -->
+    <color name="wood_dark">#4A2D14</color>     <!-- wood-dark token: bottom of the mobile .dock -->
+    <color name="moss">#4F7D33</color>          <!-- moss token: brand mark circle -->
+    <color name="gold">#F2B632</color>          <!-- gold token: brand mark snake -->
+    <color name="eye">#2F2418</color>
+</resources>
